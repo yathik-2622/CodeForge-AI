@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "uL2sE6zH24LKZPKeGXfDp"
+uri = "file://codeforge-full.zip"
+type = "unspecified"
+title = "CodeForge AI — Full Source Code"
