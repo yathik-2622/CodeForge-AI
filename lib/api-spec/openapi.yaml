@@ -3,20 +3,36 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: CodeForge AI API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: repositories
+    description: Repository management
+  - name: sessions
+    description: Agent chat sessions
+  - name: messages
+    description: Chat messages
+  - name: agents
+    description: Agent status
+  - name: executions
+    description: Terminal executions
+  - name: security
+    description: Security findings
+  - name: deployments
+    description: Deployment management
+  - name: dashboard
+    description: Dashboard aggregates
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +40,372 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /repositories:
+    get:
+      operationId: listRepositories
+      tags: [repositories]
+      summary: List connected repositories
+      responses:
+        "200":
+          description: List of repositories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Repository"
+    post:
+      operationId: connectRepository
+      tags: [repositories]
+      summary: Connect a new repository
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectRepositoryBody"
+      responses:
+        "201":
+          description: Repository connected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Repository"
+
+  /repositories/{id}:
+    get:
+      operationId: getRepository
+      tags: [repositories]
+      summary: Get repository details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Repository details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryDetail"
+
+  /repositories/{id}/scan:
+    post:
+      operationId: scanRepository
+      tags: [repositories]
+      summary: Trigger a repository scan
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Scan triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScanResult"
+
+  /repositories/{id}/graph:
+    get:
+      operationId: getRepositoryGraph
+      tags: [repositories]
+      summary: Get the code knowledge graph for a repository
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Repository graph nodes and edges
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryGraph"
+
+  /sessions:
+    get:
+      operationId: listSessions
+      tags: [sessions]
+      summary: List agent sessions
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Session"
+    post:
+      operationId: createSession
+      tags: [sessions]
+      summary: Create a new agent session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionBody"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+
+  /sessions/{id}:
+    get:
+      operationId: getSession
+      tags: [sessions]
+      summary: Get session details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+
+  /sessions/{id}/messages:
+    get:
+      operationId: listMessages
+      tags: [messages]
+      summary: List messages in a session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+    post:
+      operationId: sendMessage
+      tags: [messages]
+      summary: Send a message to the agent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageBody"
+      responses:
+        "201":
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+
+  /agents:
+    get:
+      operationId: listAgents
+      tags: [agents]
+      summary: List active agents and their status
+      responses:
+        "200":
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Agent"
+
+  /executions:
+    get:
+      operationId: listExecutions
+      tags: [executions]
+      summary: List terminal executions
+      responses:
+        "200":
+          description: List of executions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Execution"
+    post:
+      operationId: createExecution
+      tags: [executions]
+      summary: Run a terminal command (sandboxed)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateExecutionBody"
+      responses:
+        "201":
+          description: Execution started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Execution"
+
+  /executions/{id}:
+    get:
+      operationId: getExecution
+      tags: [executions]
+      summary: Get execution details and output
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Execution details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Execution"
+
+  /security/findings:
+    get:
+      operationId: listSecurityFindings
+      tags: [security]
+      summary: List security findings
+      parameters:
+        - name: repositoryId
+          in: query
+          schema:
+            type: string
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [critical, high, medium, low, info]
+      responses:
+        "200":
+          description: List of security findings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SecurityFinding"
+
+  /security/summary:
+    get:
+      operationId: getSecuritySummary
+      tags: [security]
+      summary: Get security summary grouped by severity
+      responses:
+        "200":
+          description: Security summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecuritySummary"
+
+  /deployments:
+    get:
+      operationId: listDeployments
+      tags: [deployments]
+      summary: List deployments
+      responses:
+        "200":
+          description: List of deployments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Deployment"
+
+  /deployments/{id}:
+    get:
+      operationId: getDeployment
+      tags: [deployments]
+      summary: Get deployment details
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deployment details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Deployment"
+
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get dashboard overview statistics
+      responses:
+        "200":
+          description: Dashboard statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /dashboard/activity:
+    get:
+      operationId: getDashboardActivity
+      tags: [dashboard]
+      summary: Get recent activity feed
+      responses:
+        "200":
+          description: Recent activity events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityEvent"
+
+  /dashboard/agent-metrics:
+    get:
+      operationId: getAgentMetrics
+      tags: [dashboard]
+      summary: Get agent task metrics over time
+      responses:
+        "200":
+          description: Agent metrics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentMetric"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +413,419 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    Repository:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        fullName:
+          type: string
+        provider:
+          type: string
+          enum: [github, gitlab, bitbucket, azure, local]
+        url:
+          type: string
+        language:
+          type: string
+        status:
+          type: string
+          enum: [connected, scanning, ready, error]
+        lastScannedAt:
+          type: string
+          nullable: true
+        fileCount:
+          type: integer
+        lineCount:
+          type: integer
+        frameworks:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+      required: [id, name, fullName, provider, url, language, status, fileCount, lineCount, frameworks, createdAt]
+
+    RepositoryDetail:
+      allOf:
+        - $ref: "#/components/schemas/Repository"
+        - type: object
+          properties:
+            description:
+              type: string
+            branches:
+              type: array
+              items:
+                type: string
+            dependencies:
+              type: array
+              items:
+                type: string
+            apis:
+              type: array
+              items:
+                type: string
+            databases:
+              type: array
+              items:
+                type: string
+            cicdPlatform:
+              type: string
+              nullable: true
+          required: [description, branches, dependencies, apis, databases]
+
+    ConnectRepositoryBody:
+      type: object
+      properties:
+        url:
+          type: string
+        provider:
+          type: string
+          enum: [github, gitlab, bitbucket, azure, local]
+        name:
+          type: string
+      required: [url, provider, name]
+
+    ScanResult:
+      type: object
+      properties:
+        repositoryId:
+          type: string
+        status:
+          type: string
+          enum: [started, running, complete, error]
+        filesScanned:
+          type: integer
+        issuesFound:
+          type: integer
+        startedAt:
+          type: string
+      required: [repositoryId, status, filesScanned, issuesFound, startedAt]
+
+    RepositoryGraph:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/GraphNode"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/GraphEdge"
+      required: [nodes, edges]
+
+    GraphNode:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+          enum: [function, class, api, service, database, file]
+        file:
+          type: string
+      required: [id, label, type, file]
+
+    GraphEdge:
+      type: object
+      properties:
+        source:
+          type: string
+        target:
+          type: string
+        relation:
+          type: string
+          enum: [calls, extends, imports, writes, reads]
+      required: [source, target, relation]
+
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        repositoryId:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, idle, completed, error]
+        model:
+          type: string
+        messageCount:
+          type: integer
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required: [id, title, status, model, messageCount, createdAt, updatedAt]
+
+    CreateSessionBody:
+      type: object
+      properties:
+        title:
+          type: string
+        repositoryId:
+          type: string
+          nullable: true
+        model:
+          type: string
+      required: [title, model]
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+        sessionId:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant, system, agent]
+        content:
+          type: string
+        agentType:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+        createdAt:
+          type: string
+      required: [id, sessionId, role, content, createdAt]
+
+    SendMessageBody:
+      type: object
+      properties:
+        content:
+          type: string
+      required: [content]
+
+    Agent:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [planner, repository, research, coding, debug, security, review, deployment]
+        status:
+          type: string
+          enum: [idle, running, waiting, complete, error]
+        currentTask:
+          type: string
+          nullable: true
+        tasksCompleted:
+          type: integer
+        sessionId:
+          type: string
+          nullable: true
+        lastActiveAt:
+          type: string
+      required: [id, type, status, tasksCompleted, lastActiveAt]
+
+    Execution:
+      type: object
+      properties:
+        id:
+          type: string
+        command:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, success, error, blocked]
+        output:
+          type: string
+        exitCode:
+          type: integer
+          nullable: true
+        sessionId:
+          type: string
+          nullable: true
+        durationMs:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, command, status, output, createdAt]
+
+    CreateExecutionBody:
+      type: object
+      properties:
+        command:
+          type: string
+        sessionId:
+          type: string
+          nullable: true
+      required: [command]
+
+    SecurityFinding:
+      type: object
+      properties:
+        id:
+          type: string
+        repositoryId:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [critical, high, medium, low, info]
+        category:
+          type: string
+          enum: [secret_leak, prompt_injection, malicious_package, destructive_command, vulnerability, dependency]
+        file:
+          type: string
+          nullable: true
+        line:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [open, resolved, dismissed]
+        detectedAt:
+          type: string
+      required: [id, repositoryId, title, description, severity, category, status, detectedAt]
+
+    SecuritySummary:
+      type: object
+      properties:
+        critical:
+          type: integer
+        high:
+          type: integer
+        medium:
+          type: integer
+        low:
+          type: integer
+        info:
+          type: integer
+        total:
+          type: integer
+        resolved:
+          type: integer
+        openByCategory:
+          type: object
+          additionalProperties:
+            type: integer
+      required: [critical, high, medium, low, info, total, resolved, openByCategory]
+
+    Deployment:
+      type: object
+      properties:
+        id:
+          type: string
+        repositoryId:
+          type: string
+        environment:
+          type: string
+          enum: [development, staging, production]
+        platform:
+          type: string
+          enum: [azure, aws, gcp, docker, kubernetes]
+        status:
+          type: string
+          enum: [pending, building, deploying, success, failed, rolled_back]
+        version:
+          type: string
+        branch:
+          type: string
+        commitHash:
+          type: string
+        deployedBy:
+          type: string
+        durationMs:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+        completedAt:
+          type: string
+          nullable: true
+      required: [id, repositoryId, environment, platform, status, version, branch, commitHash, deployedBy, createdAt]
+
+    DashboardStats:
+      type: object
+      properties:
+        totalRepositories:
+          type: integer
+        activeAgents:
+          type: integer
+        tasksCompleted:
+          type: integer
+        tasksToday:
+          type: integer
+        securityIssues:
+          type: integer
+        criticalIssues:
+          type: integer
+        successfulDeployments:
+          type: integer
+        linesGenerated:
+          type: integer
+        repositoriesByProvider:
+          type: object
+          additionalProperties:
+            type: integer
+        agentsByStatus:
+          type: object
+          additionalProperties:
+            type: integer
+      required: [totalRepositories, activeAgents, tasksCompleted, tasksToday, securityIssues, criticalIssues, successfulDeployments, linesGenerated, repositoriesByProvider, agentsByStatus]
+
+    ActivityEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [repo_connected, scan_complete, agent_task, code_generated, security_alert, deployment, pr_created, test_run]
+        title:
+          type: string
+        description:
+          type: string
+        repositoryId:
+          type: string
+          nullable: true
+        repositoryName:
+          type: string
+          nullable: true
+        agentType:
+          type: string
+          nullable: true
+        severity:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required: [id, type, title, description, createdAt]
+
+    AgentMetric:
+      type: object
+      properties:
+        date:
+          type: string
+        planner:
+          type: integer
+        research:
+          type: integer
+        coding:
+          type: integer
+        debug:
+          type: integer
+        security:
+          type: integer
+        review:
+          type: integer
+      required: [date, planner, research, coding, debug, security, review]
