@@ -13,6 +13,7 @@ import Security from "@/pages/Security";
 import Deployments from "@/pages/Deployments";
 import Login from "@/pages/Login";
 import WhatsApp from "@/pages/WhatsApp";
+import Instagram from "@/pages/Instagram";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -37,6 +38,7 @@ function Router() {
       <Route path="/security" component={Security} />
       <Route path="/deployments" component={Deployments} />
       <Route path="/whatsapp" component={WhatsApp} />
+      <Route path="/instagram" component={Instagram} />
       <Route component={NotFound} />
     </Switch>
   );
