@@ -4,8 +4,9 @@ import { useListRepositories, useConnectRepository, getListRepositoriesQueryKey 
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout, PageHeader } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
+import { useAuth } from "@/lib/auth";
 import { SiGithub, SiGitlab, SiBitbucket } from "react-icons/si";
-import { GitBranch, Plus, Search, FileCode2, AlignLeft } from "lucide-react";
+import { GitBranch, Plus, Search, FileCode2, AlignLeft, Star, Lock, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,6 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useQuery } from "@tanstack/react-query";
 
 const ProviderIcon = ({ provider }: { provider: string }) => {
   if (provider === "github") return <SiGithub className="w-4 h-4 text-white" />;
@@ -31,13 +33,73 @@ const connectSchema = z.object({
 });
 type ConnectForm = z.infer<typeof connectSchema>;
 
+function GitHubRepoSearch({ onImport }: { onImport: (repo: any) => void }) {
+  const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["github-repos", debouncedQ],
+    queryFn: async () => {
+      const url = debouncedQ
+        ? `/api/github/repos?q=${encodeURIComponent(debouncedQ)}`
+        : `/api/github/repos`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    enabled: true,
+    staleTime: 30_000,
+  });
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Search your GitHub repositories..."
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            clearTimeout((window as any).__ghSearch);
+            (window as any).__ghSearch = setTimeout(() => setDebouncedQ(e.target.value), 400);
+          }}
+          className="pl-9"
+        />
+      </div>
+      <div className="max-h-64 overflow-y-auto space-y-1.5">
+        {isLoading && <p className="text-xs text-muted-foreground p-2">Loading your repos...</p>}
+        {data?.repos?.map((repo: any) => (
+          <div key={repo.id} className="flex items-center gap-3 p-2.5 rounded-md bg-card border border-card-border hover:border-border transition-colors">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-medium truncate">{repo.fullName}</p>
+                {repo.private ? <Lock className="w-3 h-3 text-muted-foreground flex-shrink-0" /> : <Globe className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
+              </div>
+              <div className="flex items-center gap-3 mt-0.5">
+                {repo.language && <span className="text-xs text-muted-foreground">{repo.language}</span>}
+                <span className="text-xs text-muted-foreground flex items-center gap-0.5"><Star className="w-2.5 h-2.5" />{repo.stars}</span>
+              </div>
+            </div>
+            <Button size="sm" variant="outline" className="text-xs h-7 px-2 flex-shrink-0" onClick={() => onImport(repo)}>
+              Import
+            </Button>
+          </div>
+        ))}
+        {data?.repos?.length === 0 && <p className="text-xs text-muted-foreground p-2">No repositories found</p>}
+      </div>
+    </div>
+  );
+}
+
 export default function Repositories() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"github" | "manual">("github");
   const { data: repos } = useListRepositories();
   const connect = useConnectRepository();
   const qc = useQueryClient();
+  const { user } = useAuth();
 
   const form = useForm<ConnectForm>({
     resolver: zodResolver(connectSchema),
@@ -57,6 +119,25 @@ export default function Repositories() {
         form.reset();
       },
     });
+  };
+
+  const handleGitHubImport = async (repo: any) => {
+    const [owner, repoName] = repo.fullName.split("/");
+    try {
+      await fetch(`/api/github/repos/${owner}/${repoName}/import`, {
+        method: "POST",
+        credentials: "include",
+      });
+      qc.invalidateQueries({ queryKey: getListRepositoriesQueryKey() });
+      setOpen(false);
+    } catch (err) {
+      connect.mutate({ data: { name: repo.fullName, url: repo.url, provider: "github" } }, {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: getListRepositoriesQueryKey() });
+          setOpen(false);
+        },
+      });
+    }
   };
 
   return (
@@ -86,8 +167,11 @@ export default function Repositories() {
           {filtered.length === 0 && (
             <div className="text-center py-16 text-muted-foreground">
               <GitBranch className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">No repositories found</p>
+              <p className="text-sm">No repositories yet</p>
               <p className="text-xs mt-1">Connect your first repository to get started</p>
+              <Button size="sm" className="mt-4" onClick={() => setOpen(true)}>
+                <Plus className="w-3.5 h-3.5 mr-1.5" /> Connect Repository
+              </Button>
             </div>
           )}
           {filtered.map((repo) => (
@@ -112,9 +196,7 @@ export default function Repositories() {
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
                     <AlignLeft className="w-3 h-3" /> {repo.lineCount.toLocaleString()} lines
                   </span>
-                  {repo.language && (
-                    <span className="text-xs text-muted-foreground">{repo.language}</span>
-                  )}
+                  {repo.language && <span className="text-xs text-muted-foreground">{repo.language}</span>}
                 </div>
                 {repo.frameworks.length > 0 && (
                   <div className="flex gap-1.5 mt-2 flex-wrap">
@@ -131,58 +213,78 @@ export default function Repositories() {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Connect Repository</DialogTitle>
           </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField control={form.control} name="provider" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Provider</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+
+          {user && (
+            <div className="flex border border-border rounded-md overflow-hidden mb-1">
+              <button
+                className={`flex-1 py-2 text-xs font-medium transition-colors ${tab === "github" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setTab("github")}
+              >
+                <SiGithub className="inline w-3.5 h-3.5 mr-1.5" />From GitHub
+              </button>
+              <button
+                className={`flex-1 py-2 text-xs font-medium transition-colors ${tab === "manual" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setTab("manual")}
+              >
+                Manual URL
+              </button>
+            </div>
+          )}
+
+          {(!user || tab === "github") && user ? (
+            <GitHubRepoSearch onImport={handleGitHubImport} />
+          ) : (
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField control={form.control} name="provider" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Provider</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-provider"><SelectValue /></SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="github">GitHub</SelectItem>
+                        <SelectItem value="gitlab">GitLab</SelectItem>
+                        <SelectItem value="bitbucket">Bitbucket</SelectItem>
+                        <SelectItem value="azure">Azure DevOps</SelectItem>
+                        <SelectItem value="local">Local</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="name" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name (owner/repo)</FormLabel>
                     <FormControl>
-                      <SelectTrigger data-testid="select-provider">
-                        <SelectValue />
-                      </SelectTrigger>
+                      <Input placeholder="myorg/myrepo" {...field} data-testid="input-repo-name" />
                     </FormControl>
-                    <SelectContent>
-                      <SelectItem value="github">GitHub</SelectItem>
-                      <SelectItem value="gitlab">GitLab</SelectItem>
-                      <SelectItem value="bitbucket">Bitbucket</SelectItem>
-                      <SelectItem value="azure">Azure DevOps</SelectItem>
-                      <SelectItem value="local">Local</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="name" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="myorg/myrepo" {...field} data-testid="input-repo-name" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="url" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>URL</FormLabel>
-                  <FormControl>
-                    <Input placeholder="https://github.com/myorg/myrepo" {...field} data-testid="input-repo-url" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <DialogFooter>
-                <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={connect.isPending} data-testid="button-submit-connect">
-                  {connect.isPending ? "Connecting..." : "Connect"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="url" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>URL</FormLabel>
+                    <FormControl>
+                      <Input placeholder="https://github.com/myorg/myrepo" {...field} data-testid="input-repo-url" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <DialogFooter>
+                  <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
+                  <Button type="submit" disabled={connect.isPending} data-testid="button-submit-connect">
+                    {connect.isPending ? "Connecting..." : "Connect"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          )}
         </DialogContent>
       </Dialog>
     </Layout>

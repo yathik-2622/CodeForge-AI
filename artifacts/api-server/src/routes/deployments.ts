@@ -29,7 +29,7 @@ router.get("/deployments", async (_req, res) => {
 router.get("/deployments/:id", async (req, res) => {
   const { id } = GetDeploymentParams.parse(req.params);
   const [dep] = await db.select().from(deploymentsTable).where(eq(deploymentsTable.id, Number(id)));
-  if (!dep) return res.status(404).json({ error: "Not found" });
+  if (!dep) { res.status(404).json({ error: "Not found" }); return; }
   res.json(fmt(dep));
 });
 

@@ -7,9 +7,13 @@ import executionsRouter from "./executions";
 import securityRouter from "./security";
 import deploymentsRouter from "./deployments";
 import dashboardRouter from "./dashboard";
+import authRouter from "./auth";
+import githubRouter from "./github";
 
 const router: IRouter = Router();
 
+router.use(authRouter);
+router.use(githubRouter);
 router.use(healthRouter);
 router.use(repositoriesRouter);
 router.use(sessionsRouter);

@@ -8,7 +8,11 @@ import {
   Rocket,
   Zap,
   ChevronRight,
+  LogOut,
+  LogIn,
+  Globe,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 
 const nav = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
@@ -21,24 +25,22 @@ const nav = [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const { user, logout } = useAuth();
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      {/* Sidebar */}
       <aside className="w-56 flex-shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col">
-        {/* Logo */}
         <div className="h-14 flex items-center px-4 border-b border-sidebar-border">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center shadow-md">
               <Zap className="w-4 h-4 text-primary-foreground" strokeWidth={2.5} />
             </div>
             <span className="font-semibold text-sm tracking-tight text-foreground">
-              CodeForge <span className="text-gradient-blue">AI</span>
+              CodeForge <span className="text-primary">AI</span>
             </span>
           </div>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 py-3 px-2 space-y-0.5">
           {nav.map(({ icon: Icon, label, path }) => {
             const active = path === "/" ? location === "/" : location.startsWith(path);
@@ -53,9 +55,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 }`}
                 data-testid={`nav-${label.toLowerCase()}`}
               >
-                <Icon
-                  className={`w-4 h-4 flex-shrink-0 ${active ? "text-primary" : "text-muted-foreground"}`}
-                />
+                <Icon className={`w-4 h-4 flex-shrink-0 ${active ? "text-primary" : "text-muted-foreground"}`} />
                 {label}
                 {active && <ChevronRight className="w-3 h-3 ml-auto text-primary" />}
               </Link>
@@ -63,16 +63,47 @@ export function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Footer */}
-        <div className="p-3 border-t border-sidebar-border">
-          <div className="px-3 py-2 rounded-md bg-sidebar-accent">
-            <p className="text-xs text-muted-foreground font-mono">v0.1.0-beta</p>
-            <p className="text-xs text-muted-foreground mt-0.5">8 agents ready</p>
+        <div className="p-3 border-t border-sidebar-border space-y-2">
+          {user ? (
+            <div className="px-3 py-2 rounded-md bg-sidebar-accent flex items-center gap-2">
+              {user.avatarUrl ? (
+                <img src={user.avatarUrl} alt={user.login} className="w-6 h-6 rounded-full flex-shrink-0" />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs font-bold text-primary-foreground">{user.login[0].toUpperCase()}</span>
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-foreground truncate">{user.login}</p>
+                <p className="text-xs text-muted-foreground truncate">GitHub</p>
+              </div>
+              <button
+                onClick={logout}
+                className="p-1 rounded hover:bg-sidebar-border transition-colors flex-shrink-0"
+                title="Sign out"
+              >
+                <LogOut className="w-3 h-3 text-muted-foreground" />
+              </button>
+            </div>
+          ) : (
+            <a
+              href="/api/auth/github"
+              className="flex items-center gap-2 px-3 py-2 rounded-md bg-sidebar-accent text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              Sign in with GitHub
+            </a>
+          )}
+          <div className="px-3 py-1.5 rounded-md bg-sidebar-accent/50">
+            <p className="text-xs text-muted-foreground font-mono">v1.0.0</p>
+            <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+              <Globe className="w-2.5 h-2.5" />
+              {user ? "Connected to GitHub" : "Demo mode"}
+            </p>
           </div>
         </div>
       </aside>
 
-      {/* Main content */}
       <main className="flex-1 overflow-hidden flex flex-col min-w-0">
         {children}
       </main>
@@ -80,7 +111,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function PageHeader({ title, description, action }: { title: string; description?: string; action?: React.ReactNode }) {
+export function PageHeader({ title, description, action }: {
+  title: string; description?: string; action?: React.ReactNode;
+}) {
   return (
     <div className="h-14 border-b border-border flex items-center px-6 flex-shrink-0">
       <div className="flex-1 min-w-0">

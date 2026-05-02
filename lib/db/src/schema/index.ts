@@ -6,3 +6,4 @@ export * from "./executions";
 export * from "./security";
 export * from "./deployments";
 export * from "./activity";
+export * from "./users";

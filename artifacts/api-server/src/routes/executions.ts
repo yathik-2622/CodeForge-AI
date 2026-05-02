@@ -35,7 +35,8 @@ router.post("/executions", async (req, res) => {
       output: "Command blocked: destructive or dangerous commands are not permitted.",
       sessionId: body.sessionId ? Number(body.sessionId) : null,
     }).returning();
-    return res.status(201).json(fmt(exec));
+    res.status(201).json(fmt(exec));
+    return;
   }
   const [exec] = await db.insert(executionsTable).values({
     command: body.command,
@@ -62,7 +63,7 @@ router.post("/executions", async (req, res) => {
 router.get("/executions/:id", async (req, res) => {
   const { id } = GetExecutionParams.parse(req.params);
   const [exec] = await db.select().from(executionsTable).where(eq(executionsTable.id, Number(id)));
-  if (!exec) return res.status(404).json({ error: "Not found" });
+  if (!exec) { res.status(404).json({ error: "Not found" }); return; }
   res.json(fmt(exec));
 });
 
