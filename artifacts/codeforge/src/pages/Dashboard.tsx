@@ -51,9 +51,9 @@ const activityIcons: Record<string, string> = {
 };
 
 export default function Dashboard() {
-  const stats = useGetDashboardStats();
-  const activity = useGetDashboardActivity();
-  const metrics = useGetAgentMetrics();
+  const { data: stats } = useGetDashboardStats();
+  const { data: activity } = useGetDashboardActivity();
+  const { data: metrics } = useGetAgentMetrics();
 
   return (
     <Layout>
