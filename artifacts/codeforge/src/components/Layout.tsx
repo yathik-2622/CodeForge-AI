@@ -43,21 +43,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {nav.map(({ icon: Icon, label, path }) => {
             const active = path === "/" ? location === "/" : location.startsWith(path);
             return (
-              <Link key={path} href={path}>
-                <a
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    active
-                      ? "bg-sidebar-accent text-foreground"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
-                  }`}
-                  data-testid={`nav-${label.toLowerCase()}`}
-                >
-                  <Icon
-                    className={`w-4 h-4 flex-shrink-0 ${active ? "text-primary" : "text-muted-foreground"}`}
-                  />
-                  {label}
-                  {active && <ChevronRight className="w-3 h-3 ml-auto text-primary" />}
-                </a>
+              <Link
+                key={path}
+                href={path}
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  active
+                    ? "bg-sidebar-accent text-foreground"
+                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground"
+                }`}
+                data-testid={`nav-${label.toLowerCase()}`}
+              >
+                <Icon
+                  className={`w-4 h-4 flex-shrink-0 ${active ? "text-primary" : "text-muted-foreground"}`}
+                />
+                {label}
+                {active && <ChevronRight className="w-3 h-3 ml-auto text-primary" />}
               </Link>
             );
           })}

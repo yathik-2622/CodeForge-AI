@@ -2,25 +2,36 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import Dashboard from "@/pages/Dashboard";
+import Repositories from "@/pages/Repositories";
+import RepositoryDetail from "@/pages/RepositoryDetail";
+import Sessions from "@/pages/Sessions";
+import Chat from "@/pages/Chat";
+import Terminal from "@/pages/Terminal";
+import Security from "@/pages/Security";
+import Deployments from "@/pages/Deployments";
 import NotFound from "@/pages/not-found";
 
-const queryClient = new QueryClient();
-
-function Home() {
-  return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-gray-900">Replit Agent is building...</h1>
-        <p className="mt-2 text-sm text-gray-600">Your app will appear here once it's ready.</p>
-      </div>
-    </div>
-  );
-}
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 10_000,
+      retry: 1,
+    },
+  },
+});
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
+      <Route path="/" component={Dashboard} />
+      <Route path="/repositories" component={Repositories} />
+      <Route path="/repositories/:id" component={RepositoryDetail} />
+      <Route path="/chat" component={Sessions} />
+      <Route path="/chat/:id" component={Chat} />
+      <Route path="/terminal" component={Terminal} />
+      <Route path="/security" component={Security} />
+      <Route path="/deployments" component={Deployments} />
       <Route component={NotFound} />
     </Switch>
   );
