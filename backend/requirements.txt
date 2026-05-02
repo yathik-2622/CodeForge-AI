@@ -19,6 +19,7 @@ langgraph>=0.2.0           # Multi-agent workflow graph (Directed Acyclic Graph)
 motor>=3.5.0               # Async MongoDB driver (non-blocking)
 pymongo>=4.8.0             # MongoDB driver (motor dependency)
 qdrant-client>=1.11.0      # Qdrant vector store client
+sentence-transformers>=3.0.0  # Local embeddings for semantic code search (all-MiniLM-L6-v2)
 
 # ── Auth & Security ───────────────────────────────────────────────────────────
 python-jose[cryptography]>=3.3.0  # JWT token creation and verification

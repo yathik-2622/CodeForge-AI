@@ -1,25 +1,3 @@
-"""
-=============================================================================
-CodeForge AI — Chat Sessions & AI Streaming Routes
-=============================================================================
-
-These routes handle the core AI chat functionality:
-
-    POST   /api/sessions               → Create a new chat session
-    GET    /api/sessions               → List all sessions
-    GET    /api/sessions/{id}          → Get a single session
-    POST   /api/sessions/{id}/messages → Send a user message
-    POST   /api/sessions/{id}/stream   → Stream the AI response (SSE)
-    GET    /api/sessions/{id}/messages → Get all messages in a session
-    GET    /api/sessions/{id}/ws       → WebSocket for real-time collaboration
-
-SSE (Server-Sent Events) is how AI responses stream token by token.
-The frontend reads this stream and displays each token as it arrives —
-giving the "typing" effect you see in ChatGPT.
-
-=============================================================================
-"""
-
 import logging
 import json
 from datetime import datetime
@@ -32,236 +10,190 @@ from app.lib.websocket import ws_manager
 from app.middleware.auth import get_current_user_optional
 from app.models.session import (
     CreateSessionRequest, SendMessageRequest,
-    SessionResponse, MessageResponse
+    SessionResponse, MessageResponse,
 )
 
 log = logging.getLogger("codeforge.routes.sessions")
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
-# ── Helper: ObjectId serialization ────────────────────────────────────────────
-
-def _serialize(doc: dict) -> dict:
-    """Convert MongoDB ObjectId fields to strings for JSON serialization."""
-    if doc and "_id" in doc:
-        doc["_id"] = str(doc["_id"])
-    return doc
+def _oid(val: str) -> ObjectId:
+    try:
+        return ObjectId(val)
+    except Exception:
+        raise HTTPException(status_code=400, detail=f"Invalid ID format: {val}")
 
 
-# ── POST /api/sessions — Create a new session ─────────────────────────────────
+# ── POST /api/sessions ────────────────────────────────────────────────────────
 
 @router.post("", status_code=201)
 async def create_session(
     body: CreateSessionRequest,
     user: dict | None = Depends(get_current_user_optional),
 ):
-    """
-    Create a new AI chat session.
-    Like opening a new conversation in ChatGPT.
-    """
-    log.info(f"Creating session: title='{body.title}', model='{body.model}'")
     col = await sessions_col()
     now = datetime.utcnow()
-
-    session_doc = {
+    doc = {
         "title": body.title,
-        "model": body.model,
+        "model": body.model or "mistralai/mistral-7b-instruct:free",
         "status": "idle",
         "message_count": 0,
-        "repository_id": ObjectId(body.repository_id) if body.repository_id else None,
-        "user_id": ObjectId(str(user["_id"])) if user else None,
+        "repository_id": _oid(body.repository_id) if body.repository_id else None,
+        "user_id": user["_id"] if user else None,
         "created_at": now,
         "updated_at": now,
     }
+    result = await col.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    log.info(f"Session created: {result.inserted_id} title='{body.title}'")
+    return SessionResponse.from_mongo(doc)
 
-    result = await col.insert_one(session_doc)
-    session_doc["_id"] = result.inserted_id
-    log.info(f"Session created: id={result.inserted_id}")
-    return SessionResponse.from_mongo(session_doc)
 
-
-# ── GET /api/sessions — List sessions ─────────────────────────────────────────
+# ── GET /api/sessions ─────────────────────────────────────────────────────────
 
 @router.get("")
 async def list_sessions(user: dict | None = Depends(get_current_user_optional)):
-    """List all chat sessions, sorted newest first."""
     col = await sessions_col()
-
-    # If logged in, show user's sessions; otherwise show all (demo mode)
-    query = {"user_id": ObjectId(str(user["_id"]))} if user else {}
-
+    query = {"user_id": user["_id"]} if user else {}
     cursor = col.find(query).sort("updated_at", -1).limit(50)
-    sessions = await cursor.to_list(length=50)
-    return [SessionResponse.from_mongo(s) for s in sessions]
+    docs = await cursor.to_list(length=50)
+    return [SessionResponse.from_mongo(d) for d in docs]
 
 
-# ── GET /api/sessions/{id} — Get a single session ─────────────────────────────
+# ── GET /api/sessions/{id} ────────────────────────────────────────────────────
 
 @router.get("/{session_id}")
 async def get_session(session_id: str):
-    """Get a single session by its ID."""
     col = await sessions_col()
-    try:
-        session = await col.find_one({"_id": ObjectId(session_id)})
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
-
-    if not session:
+    doc = await col.find_one({"_id": _oid(session_id)})
+    if not doc:
         raise HTTPException(status_code=404, detail="Session not found")
+    return SessionResponse.from_mongo(doc)
 
-    return SessionResponse.from_mongo(session)
 
-
-# ── GET /api/sessions/{id}/messages — Get messages ────────────────────────────
+# ── GET /api/sessions/{id}/messages ──────────────────────────────────────────
 
 @router.get("/{session_id}/messages")
 async def list_messages(session_id: str):
-    """Get all messages in a session, in chronological order."""
     col = await messages_col()
-    try:
-        cursor = col.find(
-            {"session_id": ObjectId(session_id)}
-        ).sort("created_at", 1)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
-
-    messages = await cursor.to_list(length=200)
-    return [MessageResponse.from_mongo(m) for m in messages]
+    cursor = col.find({"session_id": _oid(session_id)}).sort("created_at", 1)
+    docs = await cursor.to_list(length=500)
+    return [MessageResponse.from_mongo(d) for d in docs]
 
 
-# ── POST /api/sessions/{id}/messages — Send a message ────────────────────────
+# ── POST /api/sessions/{id}/messages ─────────────────────────────────────────
 
 @router.post("/{session_id}/messages", status_code=201)
 async def send_message(session_id: str, body: SendMessageRequest):
-    """
-    Save a user's message to the database.
-    Call this BEFORE the /stream endpoint to record what the user said.
-    """
-    log.info(f"Saving user message to session {session_id}")
-    col = await messages_col()
-    sessions = await sessions_col()
-
-    try:
-        oid = ObjectId(session_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid session ID")
-
-    # Save the user's message
+    msg_col = await messages_col()
+    sess_col = await sessions_col()
+    oid = _oid(session_id)
     now = datetime.utcnow()
-    msg_doc = {
+
+    doc = {
         "session_id": oid,
         "role": "user",
         "content": body.content,
         "agent_type": None,
-        "metadata": None,
+        "metadata": {},
         "created_at": now,
     }
-    result = await col.insert_one(msg_doc)
-    msg_doc["_id"] = result.inserted_id
+    result = await msg_col.insert_one(doc)
+    doc["_id"] = result.inserted_id
 
-    # Update session status to "active" and bump updated_at
-    await sessions.update_one(
+    await sess_col.update_one(
         {"_id": oid},
         {"$set": {"status": "active", "updated_at": now}},
     )
 
-    # Broadcast new message to WebSocket collaborators
     await ws_manager.broadcast_to_session(session_id, {
         "type": "message_sent",
-        "message": MessageResponse.from_mongo(msg_doc).model_dump(mode="json"),
+        "message": MessageResponse.from_mongo(doc).model_dump(mode="json"),
     })
 
-    return MessageResponse.from_mongo(msg_doc)
+    return MessageResponse.from_mongo(doc)
 
 
-# ── POST /api/sessions/{id}/stream — Stream AI response (SSE) ────────────────
+# ── POST /api/sessions/{id}/stream — SSE Streaming ───────────────────────────
 
 @router.post("/{session_id}/stream")
 async def stream_response(session_id: str):
     """
-    Stream the AI's response using Server-Sent Events (SSE).
+    Stream AI response using Server-Sent Events (SSE).
 
-    SSE is a one-way connection from server to browser.
-    The browser opens this connection and waits.
-    The server sends tokens one by one as the AI generates them.
-    The browser shows each token immediately — creating the "typing" effect.
-
-    SSE message format:
-        event: token
-        data: {"token": "Hello"}
-
-        event: done
-        data: {"message_id": "abc123"}
+    Event types sent to the client:
+        event: route     — which agent path was chosen (research/code/direct)
+        event: search    — web search started or completed
+        event: token     — a single AI token
+        event: done      — streaming finished, includes saved message_id
+        event: error     — something went wrong
     """
-    log.info(f"Starting SSE stream for session {session_id}")
+    sess_col = await sessions_col()
+    msg_col = await messages_col()
+    oid = _oid(session_id)
 
-    # Load session and message history from MongoDB
-    sessions = await sessions_col()
-    messages_db = await messages_col()
-
-    try:
-        oid = ObjectId(session_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid session ID")
-
-    session = await sessions.find_one({"_id": oid})
+    session = await sess_col.find_one({"_id": oid})
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Load conversation history for context
-    cursor = messages_db.find(
-        {"session_id": oid}
-    ).sort("created_at", 1).limit(20)
+    # Load last 20 messages for context
+    cursor = msg_col.find({"session_id": oid}).sort("created_at", 1).limit(20)
     history_docs = await cursor.to_list(length=20)
 
-    if not history_docs:
-        raise HTTPException(status_code=400, detail="No messages to respond to")
+    user_msgs = [m for m in history_docs if m["role"] == "user"]
+    if not user_msgs:
+        raise HTTPException(status_code=400, detail="No user message to respond to")
 
-    # Get the latest user message
-    user_messages = [m for m in history_docs if m["role"] == "user"]
-    if not user_messages:
-        raise HTTPException(status_code=400, detail="No user message found")
-
-    last_user_message = user_messages[-1]["content"]
-
-    # Build history list for the agent (exclude the last message — it's the query)
+    last_user_msg = user_msgs[-1]["content"]
     history = [
         {"role": m["role"], "content": m["content"]}
         for m in history_docs[:-1]
     ]
 
     async def event_generator():
-        """
-        AsyncGenerator that yields SSE-formatted events.
-        Called by StreamingResponse to send data to the browser.
-        """
         full_response = ""
-
-        # Signal the start of streaming to WebSocket collaborators
         await ws_manager.broadcast_to_session(session_id, {"type": "stream_start"})
 
         try:
-            # Stream tokens from the LangGraph agent
-            async for token in stream_agent_graph(
-                user_message=last_user_message,
+            async for chunk in stream_agent_graph(
+                user_message=last_user_msg,
                 history=history,
                 model=session.get("model"),
             ):
-                full_response += token
-                # Send each token as an SSE event
-                yield f"event: token\ndata: {json.dumps({'token': token})}\n\n"
-                # Also broadcast to WebSocket collaborators
-                await ws_manager.broadcast_to_session(session_id, {"type": "token", "token": token})
+                if isinstance(chunk, dict):
+                    # Structured event (route decision, search status, etc.)
+                    event_type = chunk.get("event", "info")
+                    payload = {k: v for k, v in chunk.items() if k != "event"}
+
+                    if event_type == "route":
+                        yield f"event: route\ndata: {json.dumps(payload)}\n\n"
+                    elif event_type == "search_start":
+                        yield f"event: search\ndata: {json.dumps({'status': 'searching'})}\n\n"
+                        await ws_manager.broadcast_to_session(session_id, {"type": "search_start"})
+                    elif event_type == "search_done":
+                        yield f"event: search\ndata: {json.dumps({'status': 'done', **payload})}\n\n"
+                        await ws_manager.broadcast_to_session(session_id, {"type": "search_done"})
+                    elif event_type == "search_error":
+                        yield f"event: search\ndata: {json.dumps({'status': 'error', **payload})}\n\n"
+                else:
+                    # Plain string token
+                    token: str = chunk
+                    full_response += token
+                    yield f"event: token\ndata: {json.dumps({'token': token})}\n\n"
+                    await ws_manager.broadcast_to_session(session_id, {"type": "token", "token": token})
 
         except Exception as e:
-            log.error(f"Streaming error in session {session_id}: {e}")
+            log.error(f"Streaming error (session={session_id}): {e}", exc_info=True)
             yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
             await ws_manager.broadcast_to_session(session_id, {"type": "stream_end"})
             return
 
-        # Save the complete AI response to MongoDB
+        if not full_response.strip():
+            full_response = "I was unable to generate a response. Please try again."
+
+        # Persist the full AI response
         now = datetime.utcnow()
-        msg_doc = {
+        ai_doc = {
             "session_id": oid,
             "role": "agent",
             "content": full_response,
@@ -269,72 +201,89 @@ async def stream_response(session_id: str):
             "metadata": {
                 "model": session.get("model"),
                 "char_count": len(full_response),
+                "word_count": len(full_response.split()),
             },
             "created_at": now,
         }
-        msg_result = await messages_db.insert_one(msg_doc)
-        msg_doc["_id"] = msg_result.inserted_id
+        msg_result = await msg_col.insert_one(ai_doc)
+        ai_doc["_id"] = msg_result.inserted_id
 
-        # Update session stats
-        msg_count = await messages_db.count_documents({"session_id": oid})
-        await sessions.update_one(
+        msg_count = await msg_col.count_documents({"session_id": oid})
+        await sess_col.update_one(
             {"_id": oid},
             {"$set": {"status": "idle", "message_count": msg_count, "updated_at": now}},
         )
 
-        # Notify WebSocket collaborators that streaming is done
-        msg_response = MessageResponse.from_mongo(msg_doc)
+        response_obj = MessageResponse.from_mongo(ai_doc)
         await ws_manager.broadcast_to_session(session_id, {
             "type": "stream_end",
-            "message": msg_response.model_dump(mode="json"),
+            "message": response_obj.model_dump(mode="json"),
         })
 
-        # Send SSE done event with the saved message ID
-        yield f"event: done\ndata: {json.dumps({'message_id': str(msg_result.inserted_id)})}\n\n"
-        log.info(f"✅ Streaming complete for session {session_id} ({len(full_response)} chars)")
+        yield f"event: done\ndata: {json.dumps({'message_id': str(msg_result.inserted_id), 'char_count': len(full_response)})}\n\n"
+        log.info(f"Stream complete: session={session_id} chars={len(full_response)}")
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",        # Disable caching for real-time data
-            "X-Accel-Buffering": "no",          # Disable Nginx buffering
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
         },
     )
 
 
-# ── GET /api/sessions/{id}/ws — WebSocket for real-time collaboration ─────────
+# ── DELETE /api/sessions/{id} ─────────────────────────────────────────────────
+
+@router.delete("/{session_id}", status_code=204)
+async def delete_session(session_id: str):
+    sess_col = await sessions_col()
+    msg_col = await messages_col()
+    oid = _oid(session_id)
+    await msg_col.delete_many({"session_id": oid})
+    result = await sess_col.delete_one({"_id": oid})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+
+# ── PATCH /api/sessions/{id} ─────────────────────────────────────────────────
+
+@router.patch("/{session_id}")
+async def update_session(session_id: str, body: dict):
+    col = await sessions_col()
+    allowed = {"title", "model"}
+    updates = {k: v for k, v in body.items() if k in allowed}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    updates["updated_at"] = datetime.utcnow()
+    result = await col.find_one_and_update(
+        {"_id": _oid(session_id)},
+        {"$set": updates},
+        return_document=True,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return SessionResponse.from_mongo(result)
+
+
+# ── WebSocket /api/sessions/{id}/ws ──────────────────────────────────────────
 
 @router.websocket("/{session_id}/ws")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
-    """
-    WebSocket endpoint for real-time collaborative sessions.
-
-    When multiple users open the same session URL, they all connect here.
-    The server broadcasts:
-    - When AI streams tokens (all users see them simultaneously)
-    - When a participant joins or leaves
-    - When a new message is sent
-
-    Protocol messages sent to clients:
-        {"type": "joined", "participant": {...}, "participants": [...]}
-        {"type": "participant_joined", "participant": {...}}
-        {"type": "participant_left", "participant_id": "..."}
-        {"type": "token", "token": "Hello"}
-        {"type": "stream_start"}
-        {"type": "stream_end", "message": {...}}
-    """
-    log.info(f"WebSocket connecting to session {session_id}")
     participant = await ws_manager.connect(websocket, session_id)
-
     try:
-        # Keep the connection alive, handling pings
         while True:
             data = await websocket.receive_json()
             if data.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})
+            elif data.get("type") == "typing":
+                await ws_manager.broadcast_to_others(session_id, participant.id, {
+                    "type": "user_typing",
+                    "participant": {"id": participant.id, "name": participant.name},
+                })
     except WebSocketDisconnect:
-        log.info(f"WebSocket disconnected: {participant.name} from session {session_id}")
+        log.info(f"WS disconnected: {participant.name} from session {session_id}")
     finally:
         await ws_manager.disconnect(participant.id, session_id)

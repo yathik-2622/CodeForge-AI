@@ -1,80 +1,118 @@
-"""
-=============================================================================
-CodeForge AI — Application Configuration
-=============================================================================
-
-This module loads all configuration from environment variables.
-Uses pydantic-settings for type-safe config with automatic .env loading.
-
-Usage:
-    from app.config import settings
-    print(settings.MONGODB_URL)
-
-=============================================================================
-"""
-
+from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 
 
 class Settings(BaseSettings):
-    """
-    All application settings loaded from environment variables.
-    If a variable is missing, the default value is used.
-    Required fields (no default) will raise an error on startup if missing.
-    """
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
-    # ── Server ────────────────────────────────────────────────────────────────
-    PORT: int = 9000
-    FRONTEND_URL: str = "http://localhost:5173"
-    APP_URL: str = "http://localhost:9000"
+    # Server
+    port: int = 9000
+    frontend_url: str = "http://localhost:5173"
+    app_url: str = "http://localhost:9000"
+    cors_origins: str = "http://localhost:5173,http://localhost:3000"
 
-    # ── Security ──────────────────────────────────────────────────────────────
-    SESSION_SECRET: str = "change-this-to-a-real-secret-in-production"
-    JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_DAYS: int = 30
+    # Security
+    session_secret: str = "change-this-to-a-real-secret-min-32-chars-long"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_days: int = 30
 
-    # ── AI ────────────────────────────────────────────────────────────────────
-    OPENROUTER_API_KEY: str = ""
-    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
-    DEFAULT_MODEL: str = "mistralai/mistral-7b-instruct:free"
+    # OpenRouter / AI
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    ai_model: str = "mistralai/mistral-7b-instruct:free"
+    ai_temperature: float = 0.2
+    max_tokens: int = 4096
 
-    # Available free models on OpenRouter
-    FREE_MODELS: list[dict] = [
+    free_models: list[dict] = [
         {"id": "mistralai/mistral-7b-instruct:free", "label": "Mistral 7B", "context": 32768},
         {"id": "meta-llama/llama-3-8b-instruct:free", "label": "Llama 3 8B", "context": 8192},
         {"id": "microsoft/phi-3-mini-128k-instruct:free", "label": "Phi-3 Mini", "context": 131072},
         {"id": "google/gemma-3-12b-it:free", "label": "Gemma 3 12B", "context": 131072},
     ]
 
-    # ── Database: MongoDB ─────────────────────────────────────────────────────
-    MONGODB_URL: str = "mongodb://localhost:27017"
-    MONGODB_DB: str = "codeforge"
+    # MongoDB
+    mongodb_url: str = "mongodb://localhost:27017"
+    mongodb_db: str = "codeforge"
 
-    # ── Vector Store: Qdrant ──────────────────────────────────────────────────
-    QDRANT_URL: str = ""          # Empty = use in-memory mode
-    QDRANT_API_KEY: str = ""
-    QDRANT_COLLECTION: str = "codeforge_repos"
+    # Qdrant
+    qdrant_url: str = ""
+    qdrant_api_key: str = ""
+    qdrant_collection: str = "codeforge_repos"
+    qdrant_vector_size: int = 384  # all-MiniLM-L6-v2
 
-    # ── GitHub OAuth ──────────────────────────────────────────────────────────
-    GITHUB_CLIENT_ID: str = ""
-    GITHUB_CLIENT_SECRET: str = ""
+    # GitHub OAuth
+    github_client_id: str = ""
+    github_client_secret: str = ""
 
-    # ── Tavily Web Search ─────────────────────────────────────────────────────
-    TAVILY_API_KEY: str = ""
+    # Tavily
+    tavily_api_key: str = ""
 
-    # ── Twilio (WhatsApp + Instagram) ─────────────────────────────────────────
-    TWILIO_ACCOUNT_SID: str = ""
-    TWILIO_AUTH_TOKEN: str = ""
-    TWILIO_WHATSAPP_FROM: str = ""
-    TWILIO_INSTAGRAM_FROM: str = ""
+    # Twilio
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_whatsapp_from: str = ""
+    twilio_instagram_from: str = ""
 
-    # Pydantic settings: automatically load from .env file
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",  # Ignore extra env vars not defined here
-    )
+    # Aliases for backward-compat uppercase access
+    @property
+    def PORT(self): return self.port
+    @property
+    def FRONTEND_URL(self): return self.frontend_url
+    @property
+    def APP_URL(self): return self.app_url
+    @property
+    def SESSION_SECRET(self): return self.session_secret
+    @property
+    def JWT_ALGORITHM(self): return self.jwt_algorithm
+    @property
+    def JWT_EXPIRE_DAYS(self): return self.jwt_expire_days
+    @property
+    def OPENROUTER_API_KEY(self): return self.openrouter_api_key
+    @property
+    def OPENROUTER_BASE_URL(self): return self.openrouter_base_url
+    @property
+    def DEFAULT_MODEL(self): return self.ai_model
+    @property
+    def FREE_MODELS(self): return self.free_models
+    @property
+    def MONGODB_URL(self): return self.mongodb_url
+    @property
+    def MONGODB_DB(self): return self.mongodb_db
+    @property
+    def QDRANT_URL(self): return self.qdrant_url
+    @property
+    def QDRANT_API_KEY(self): return self.qdrant_api_key
+    @property
+    def QDRANT_COLLECTION(self): return self.qdrant_collection
+    @property
+    def GITHUB_CLIENT_ID(self): return self.github_client_id
+    @property
+    def GITHUB_CLIENT_SECRET(self): return self.github_client_secret
+    @property
+    def TAVILY_API_KEY(self): return self.tavily_api_key
+    @property
+    def TWILIO_ACCOUNT_SID(self): return self.twilio_account_sid
+    @property
+    def TWILIO_AUTH_TOKEN(self): return self.twilio_auth_token
+    @property
+    def TWILIO_WHATSAPP_FROM(self): return self.twilio_whatsapp_from
+    @property
+    def TWILIO_INSTAGRAM_FROM(self): return self.twilio_instagram_from
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
-# Single global settings instance — import this everywhere
-settings = Settings()
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()

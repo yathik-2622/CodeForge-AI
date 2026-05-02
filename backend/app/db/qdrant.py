@@ -1,89 +1,85 @@
-"""
-=============================================================================
-CodeForge AI — Qdrant Vector Store Client
-=============================================================================
-
-Qdrant is a vector database used for semantic search.
-Instead of searching by exact keywords, vectors let you search by MEANING.
-
-Example use cases:
-    - "Find functions that handle authentication" → finds relevant code
-    - "Show me similar errors to this one" → finds similar past issues
-    - "Search repos that use this pattern" → finds similar code patterns
-
-How it works:
-    1. We convert text (code, descriptions) into "vectors" (lists of numbers)
-       using an embedding model.
-    2. We store those vectors in Qdrant.
-    3. When searching, we convert the query to a vector and find the
-       nearest neighbors (most similar vectors).
-
-=============================================================================
-"""
-
 import logging
+import hashlib
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 from app.config import settings
 
 log = logging.getLogger("codeforge.db.qdrant")
 
-# Global Qdrant client instance
 _qdrant: QdrantClient | None = None
 
-# Vector dimensions — must match the embedding model you use.
-# text-embedding-ada-002 = 1536, all-MiniLM-L6-v2 = 384
-VECTOR_SIZE = 1536  # Using OpenAI-compatible embeddings via OpenRouter
+VECTOR_SIZE = 384  # all-MiniLM-L6-v2 embedding dimensions
+_embedder = None
+
+
+def _get_embedder():
+    global _embedder
+    if _embedder is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+            _embedder = SentenceTransformer("all-MiniLM-L6-v2")
+            log.info("✅ Sentence transformer embedder loaded (all-MiniLM-L6-v2)")
+        except Exception as e:
+            log.warning(f"Sentence transformer unavailable: {e}. Using zero vectors.")
+            _embedder = None
+    return _embedder
+
+
+def embed_text(text: str) -> list[float]:
+    embedder = _get_embedder()
+    if embedder is None:
+        return [0.0] * VECTOR_SIZE
+    try:
+        vec = embedder.encode(text[:512], normalize_embeddings=True)
+        return vec.tolist()
+    except Exception as e:
+        log.error(f"Embedding error: {e}")
+        return [0.0] * VECTOR_SIZE
 
 
 def get_qdrant() -> QdrantClient:
-    """
-    Get or create the Qdrant client.
-    - If QDRANT_URL is set: connects to a real Qdrant server (persistent)
-    - If not set: uses in-memory mode (data lost on restart, good for dev)
-    """
     global _qdrant
-
     if _qdrant is not None:
         return _qdrant
 
-    if settings.QDRANT_URL:
-        # Connect to a running Qdrant server (local Docker or Qdrant Cloud)
-        log.info(f"Connecting to Qdrant at {settings.QDRANT_URL}")
+    if settings.QDRANT_URL and settings.QDRANT_API_KEY:
+        log.info(f"Connecting to Qdrant cloud: {settings.QDRANT_URL}")
         _qdrant = QdrantClient(
             url=settings.QDRANT_URL,
-            api_key=settings.QDRANT_API_KEY or None,
+            api_key=settings.QDRANT_API_KEY,
+            timeout=30,
         )
-        log.info("✅ Qdrant connected (persistent mode)")
+        log.info("✅ Qdrant cloud connected")
+    elif settings.QDRANT_URL:
+        _qdrant = QdrantClient(url=settings.QDRANT_URL, timeout=30)
+        log.info(f"✅ Qdrant connected at {settings.QDRANT_URL}")
     else:
-        # Use in-memory Qdrant — no setup needed, good for development
-        log.info("Using Qdrant in-memory mode (data not persisted)")
+        log.info("Using Qdrant in-memory mode")
         _qdrant = QdrantClient(":memory:")
-        log.info("✅ Qdrant ready (in-memory mode)")
+        log.info("✅ Qdrant ready (in-memory)")
 
     return _qdrant
 
 
-async def ensure_collection(collection_name: str = settings.QDRANT_COLLECTION) -> None:
-    """
-    Create the Qdrant collection if it doesn't exist.
-    A "collection" in Qdrant is like a table in SQL.
-    """
+async def ensure_collection(collection_name: str = None) -> None:
+    name = collection_name or settings.QDRANT_COLLECTION
     client = get_qdrant()
-
     try:
-        client.get_collection(collection_name)
-        log.info(f"Qdrant collection '{collection_name}' already exists")
-    except (UnexpectedResponse, Exception):
-        # Collection doesn't exist — create it
+        info = client.get_collection(name)
+        log.info(f"Qdrant collection '{name}' exists ({info.points_count} points)")
+    except Exception:
         client.create_collection(
-            collection_name=collection_name,
+            collection_name=name,
             vectors_config=models.VectorParams(
                 size=VECTOR_SIZE,
-                distance=models.Distance.COSINE,  # Cosine similarity for text
+                distance=models.Distance.COSINE,
             ),
         )
-        log.info(f"✅ Qdrant collection '{collection_name}' created")
+        log.info(f"✅ Qdrant collection '{name}' created")
+
+
+def _stable_id(chunk_id: str) -> int:
+    return int(hashlib.md5(chunk_id.encode()).hexdigest(), 16) % (2**63)
 
 
 async def upsert_code_chunk(
@@ -92,21 +88,12 @@ async def upsert_code_chunk(
     vector: list[float],
     payload: dict,
 ) -> None:
-    """
-    Store a code chunk with its vector embedding.
-
-    Args:
-        collection: Which collection to store in
-        chunk_id:   Unique ID for this chunk (e.g., "repo_123_file_456_chunk_7")
-        vector:     The embedding vector (list of floats)
-        payload:    Metadata (file path, language, content, repo ID, etc.)
-    """
     client = get_qdrant()
     client.upsert(
         collection_name=collection,
         points=[
             models.PointStruct(
-                id=abs(hash(chunk_id)) % (2**63),  # Qdrant needs integer IDs
+                id=_stable_id(chunk_id),
                 vector=vector,
                 payload={**payload, "chunk_id": chunk_id},
             )
@@ -120,43 +107,26 @@ async def search_similar_code(
     limit: int = 5,
     filter_repo_id: str | None = None,
 ) -> list[dict]:
-    """
-    Find the most similar code chunks to the query vector.
-
-    Args:
-        collection:     Which collection to search
-        query_vector:   The query embedded as a vector
-        limit:          How many results to return
-        filter_repo_id: Only search within a specific repository
-
-    Returns:
-        List of matching chunks with their metadata and similarity scores
-    """
     client = get_qdrant()
-
-    # Optional filter to search only within a specific repo
     query_filter = None
     if filter_repo_id:
         query_filter = models.Filter(
-            must=[
-                models.FieldCondition(
-                    key="repo_id",
-                    match=models.MatchValue(value=filter_repo_id),
-                )
-            ]
+            must=[models.FieldCondition(
+                key="repo_id",
+                match=models.MatchValue(value=filter_repo_id),
+            )]
         )
-
     results = client.search(
         collection_name=collection,
         query_vector=query_vector,
         limit=limit,
         query_filter=query_filter,
         with_payload=True,
+        score_threshold=0.5,
     )
-
     return [
         {
-            "score": r.score,           # Similarity score (0-1, higher = more similar)
+            "score": round(r.score, 4),
             "chunk_id": r.payload.get("chunk_id"),
             "file_path": r.payload.get("file_path"),
             "content": r.payload.get("content"),
@@ -165,3 +135,19 @@ async def search_similar_code(
         }
         for r in results
     ]
+
+
+async def delete_repo_chunks(collection: str, repo_id: str) -> None:
+    client = get_qdrant()
+    client.delete(
+        collection_name=collection,
+        points_selector=models.FilterSelector(
+            filter=models.Filter(
+                must=[models.FieldCondition(
+                    key="repo_id",
+                    match=models.MatchValue(value=repo_id),
+                )]
+            )
+        ),
+    )
+    log.info(f"Deleted Qdrant chunks for repo_id={repo_id}")
