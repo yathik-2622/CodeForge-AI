@@ -6,3 +6,9 @@ id = "uL2sE6zH24LKZPKeGXfDp"
 uri = "file://codeforge-full.zip"
 type = "unspecified"
 title = "CodeForge AI — Full Source Code"
+
+[[outputs]]
+id = "JZfNK2dmrSZrvxAcoiiFt"
+uri = "file://docs/FULL-SETUP-GUIDE.md"
+type = "text"
+title = "CodeForge AI — Complete Setup Guide"
