@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { useListExecutions, useCreateExecution, getListExecutionsQueryKey, useGetExecution } from "@workspace/api-client-react";
+import { useListExecutions, useCreateExecution, getListExecutionsQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout, PageHeader } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Terminal as TerminalIcon, Play, ChevronDown, ChevronRight, AlertTriangle, CheckCircle, Loader, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useState as useLocalState } from "react";
 
 function ExecutionRow({ exec }: { exec: any }) {
   const [expanded, setExpanded] = useState(false);
@@ -42,7 +41,7 @@ function ExecutionRow({ exec }: { exec: any }) {
 
 export default function Terminal() {
   const [command, setCommand] = useState("");
-  const executions = useListExecutions();
+  const { data: executions } = useListExecutions();
   const create = useCreateExecution();
   const qc = useQueryClient();
 

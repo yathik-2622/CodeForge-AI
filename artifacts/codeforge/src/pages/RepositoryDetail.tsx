@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useRef } from "react";
 import { useParams } from "wouter";
 import {
   useGetRepository,
@@ -85,13 +85,13 @@ export default function RepositoryDetail() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const qc = useQueryClient();
-  const repo = useGetRepository(id, { query: { enabled: !!id, queryKey: getGetRepositoryQueryKey(id) } });
-  const graph = useGetRepositoryGraph(id, { query: { enabled: !!id, queryKey: getGetRepositoryGraphQueryKey(id) } });
+  const { data: repo } = useGetRepository(id, { query: { enabled: !!id, queryKey: getGetRepositoryQueryKey(id) } });
+  const { data: graph } = useGetRepositoryGraph(id, { query: { enabled: !!id, queryKey: getGetRepositoryGraphQueryKey(id) } });
   const scan = useScanRepository();
-  const findings = useListSecurityFindings({ repositoryId: id });
-  const deployments = useListDeployments();
+  const { data: findings } = useListSecurityFindings({ repositoryId: id });
+  const { data: deployments } = useListDeployments();
 
-  const repoDeployments = deployments?.filter((d) => d.repositoryId === id) ?? [];
+  const repoDeployments = (deployments ?? []).filter((d) => d.repositoryId === id);
   const repoFindings = findings ?? [];
 
   const handleScan = () => {

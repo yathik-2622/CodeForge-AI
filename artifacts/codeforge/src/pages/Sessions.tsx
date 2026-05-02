@@ -31,7 +31,7 @@ const MODEL_LABELS: Record<string, string> = {
 export default function Sessions() {
   const [, setLocation] = useLocation();
   const [open, setOpen] = useState(false);
-  const sessions = useListSessions();
+  const { data: sessions } = useListSessions();
   const create = useCreateSession();
   const qc = useQueryClient();
 

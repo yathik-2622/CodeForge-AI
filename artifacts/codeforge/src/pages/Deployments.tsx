@@ -1,8 +1,7 @@
-import { useListDeployments, useGetDeployment } from "@workspace/api-client-react";
+import { useListDeployments } from "@workspace/api-client-react";
 import { Layout, PageHeader } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Rocket, GitBranch, GitCommit, User, Clock } from "lucide-react";
-import { SiAmazonwebservices } from "react-icons/si";
 
 const PLATFORM_LABELS: Record<string, string> = {
   azure: "Azure",
@@ -18,7 +17,7 @@ const ENV_COLORS: Record<string, string> = {
 };
 
 export default function Deployments() {
-  const deployments = useListDeployments();
+  const { data: deployments } = useListDeployments();
   const sorted = [...(deployments ?? [])].reverse();
 
   return (

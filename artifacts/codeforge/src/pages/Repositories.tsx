@@ -35,7 +35,7 @@ export default function Repositories() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
-  const repos = useListRepositories();
+  const { data: repos } = useListRepositories();
   const connect = useConnectRepository();
   const qc = useQueryClient();
 
@@ -44,10 +44,10 @@ export default function Repositories() {
     defaultValues: { name: "", url: "", provider: "github" },
   });
 
-  const filtered = repos?.filter((r) =>
+  const filtered = (repos ?? []).filter((r) =>
     r.name.toLowerCase().includes(search.toLowerCase()) ||
     r.language.toLowerCase().includes(search.toLowerCase())
-  ) ?? [];
+  );
 
   const onSubmit = (data: ConnectForm) => {
     connect.mutate({ data }, {

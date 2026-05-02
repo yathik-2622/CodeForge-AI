@@ -72,9 +72,9 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const session = useGetSession(id, { query: { enabled: !!id, queryKey: getGetSessionQueryKey(id) } });
-  const messages = useListMessages(id, { query: { enabled: !!id, queryKey: getListMessagesQueryKey(id) } });
-  const agents = useListAgents();
+  const { data: session } = useGetSession(id, { query: { enabled: !!id, queryKey: getGetSessionQueryKey(id) } });
+  const { data: messages } = useListMessages(id, { query: { enabled: !!id, queryKey: getListMessagesQueryKey(id) } });
+  const { data: agents } = useListAgents();
   const send = useSendMessage();
 
   useEffect(() => {

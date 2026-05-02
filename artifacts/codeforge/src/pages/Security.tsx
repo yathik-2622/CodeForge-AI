@@ -39,8 +39,8 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
 
 export default function Security() {
   const [filterSeverity, setFilterSeverity] = useState<string | null>(null);
-  const summary = useGetSecuritySummary();
-  const findings = useListSecurityFindings(filterSeverity ? { severity: filterSeverity as any } : {});
+  const { data: summary } = useGetSecuritySummary();
+  const { data: findings } = useListSecurityFindings(filterSeverity ? { severity: filterSeverity as any } : {});
 
   return (
     <Layout>
