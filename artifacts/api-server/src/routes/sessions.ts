@@ -5,6 +5,7 @@ import { eq, desc } from "drizzle-orm";
 import { CreateSessionBody, GetSessionParams, SendMessageParams, SendMessageBody } from "@workspace/api-zod";
 import { streamCompletion, type ChatMessage } from "../lib/ai";
 import { webSearch } from "../lib/search";
+import { rooms } from "../lib/websocket";
 
 const router: IRouter = Router();
 
@@ -128,6 +129,7 @@ router.post("/sessions/:id/stream", async (req, res): Promise<void> => {
   };
 
   send("start", { sessionId: id });
+  rooms.broadcastToSession(id, { type: "stream_start", sessionId: id });
 
   await streamCompletion(
     messages,
@@ -135,6 +137,7 @@ router.post("/sessions/:id/stream", async (req, res): Promise<void> => {
     (token) => {
       fullContent += token;
       send("token", { token });
+      rooms.broadcastToSession(id, { type: "token", token });
     },
     async () => {
       const [agentMsg] = await db.insert(messagesTable).values({
@@ -150,10 +153,12 @@ router.post("/sessions/:id/stream", async (req, res): Promise<void> => {
         .set({ messageCount: count, updatedAt: new Date(), status: "idle" })
         .where(eq(sessionsTable.id, Number(id)));
 
+      rooms.broadcastToSession(id, { type: "stream_end", messageId: String(agentMsg.id) });
       send("done", { messageId: String(agentMsg.id) });
       res.end();
     },
     (err) => {
+      rooms.broadcastToSession(id, { type: "stream_end" });
       send("error", { message: err.message });
       res.end();
     },

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams } from "wouter";
+import { useParams, useLocation } from "wouter";
 import {
   useGetSession,
   getGetSessionQueryKey,
@@ -11,9 +11,13 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout, PageHeader } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Send, User, Bot, Cpu, Zap, Globe, Loader2, Copy, Check } from "lucide-react";
+import {
+  Send, User, Bot, Cpu, Zap, Globe, Loader2,
+  Copy, Check, Share2, Users, Link, X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useSessionSocket, type Participant, type SessionSocketState } from "@/hooks/useSessionSocket";
 
 const AGENT_COLORS: Record<string, string> = {
   planner: "text-violet-400",
@@ -96,6 +100,72 @@ function MessageBubble({ msg, isStreaming }: { msg: any; isStreaming?: boolean }
   );
 }
 
+function ParticipantDot({ p, isMe }: { p: Participant; isMe: boolean }) {
+  return (
+    <div className="relative group">
+      <div
+        className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ring-2 ring-background"
+        style={{ backgroundColor: p.color }}
+        title={p.name + (isMe ? " (you)" : "")}
+      >
+        {p.name[0]}
+      </div>
+      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 bg-popover border border-border rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+        {p.name}{isMe ? " (you)" : ""}
+      </div>
+    </div>
+  );
+}
+
+function ShareModal({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const url = `${window.location.origin}${window.location.pathname}`;
+
+  function copy() {
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-card border border-card-border rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-primary" />
+            <h2 className="font-semibold text-sm">Share Session</h2>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-secondary transition-colors">
+            <X className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </div>
+
+        <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+          Anyone with this link can join as a <span className="text-foreground font-medium">live collaborator</span> — they'll see AI responses stream in real time and can send their own messages.
+        </p>
+
+        <div className="flex items-center gap-2 bg-secondary rounded-lg p-3 mb-4">
+          <Link className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+          <span className="text-xs font-mono text-muted-foreground flex-1 truncate">{url}</span>
+          <button
+            onClick={copy}
+            className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+          >
+            {copied ? <><Check className="w-3 h-3" /> Copied!</> : <><Copy className="w-3 h-3" /> Copy</>}
+          </button>
+        </div>
+
+        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+          <p className="text-xs text-emerald-400 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+            Real-time sync active — collaborators see every token as it streams
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Chat() {
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -103,8 +173,28 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const [showShare, setShowShare] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Collaborative state
+  const [wsState, setWsState] = useState<SessionSocketState>({
+    connected: false,
+    me: null,
+    participants: [],
+    streamingToken: "",
+    isRemoteStreaming: false,
+  });
+
+  const handleWsUpdate = useCallback((state: SessionSocketState) => {
+    setWsState({ ...state });
+    // If a remote stream just ended, refresh messages
+    if (!state.isRemoteStreaming && state.streamingToken === "") {
+      qc.invalidateQueries({ queryKey: getListMessagesQueryKey(id ?? "") });
+    }
+  }, [id, qc]);
+
+  useSessionSocket(id, handleWsUpdate);
 
   const { data: session } = useGetSession(id, { query: { enabled: !!id, queryKey: getGetSessionQueryKey(id) } });
   const { data: messages, refetch: refetchMessages } = useListMessages(id, { query: { enabled: !!id, queryKey: getListMessagesQueryKey(id) } });
@@ -113,7 +203,7 @@ export default function Chat() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages?.length, streamingContent]);
+  }, [messages?.length, streamingContent, wsState.streamingToken]);
 
   const startStream = useCallback(async () => {
     if (!id) return;
@@ -130,9 +220,7 @@ export default function Chat() {
         signal: ctrl.signal,
       });
 
-      if (!response.ok || !response.body) {
-        throw new Error(`Stream error ${response.status}`);
-      }
+      if (!response.ok || !response.body) throw new Error(`Stream error ${response.status}`);
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -165,9 +253,7 @@ export default function Chat() {
         }
       }
     } catch (err: any) {
-      if (err.name !== "AbortError") {
-        await refetchMessages();
-      }
+      if (err.name !== "AbortError") await refetchMessages();
     } finally {
       setIsStreaming(false);
       setStreamingContent("");
@@ -178,7 +264,6 @@ export default function Chat() {
     if (!input.trim() || !id || isStreaming) return;
     const content = input;
     setInput("");
-
     send.mutate({ id, data: { content } }, {
       onSuccess: async () => {
         await refetchMessages();
@@ -188,10 +273,7 @@ export default function Chat() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
   const streamingMsg = streamingContent ? {
@@ -202,17 +284,59 @@ export default function Chat() {
     createdAt: new Date().toISOString(),
   } : null;
 
+  // Remote streaming bubble (from WebSocket — other collaborators see the same stream)
+  const remoteStreamingMsg = wsState.isRemoteStreaming && !isStreaming && wsState.streamingToken ? {
+    id: "__remote_streaming__",
+    role: "agent",
+    content: wsState.streamingToken,
+    agentType: "coding",
+    createdAt: new Date().toISOString(),
+  } : null;
+
+  const otherParticipants = wsState.participants.filter((p) => p.id !== wsState.me?.id);
+
   return (
     <Layout>
       <PageHeader
         title={session?.title ?? "Loading..."}
         description={session?.model}
-        action={session && <StatusBadge value={session.status} />}
+        action={
+          <div className="flex items-center gap-2">
+            {/* Live participant avatars */}
+            {wsState.connected && wsState.participants.length > 0 && (
+              <div className="flex items-center gap-1.5 mr-1">
+                <div className="flex -space-x-1.5">
+                  {wsState.participants.slice(0, 5).map((p) => (
+                    <ParticipantDot key={p.id} p={p} isMe={p.id === wsState.me?.id} />
+                  ))}
+                </div>
+                {wsState.participants.length > 1 && (
+                  <span className="text-xs text-muted-foreground ml-1">
+                    {wsState.participants.length} live
+                  </span>
+                )}
+              </div>
+            )}
+            {session && <StatusBadge value={session.status} />}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1.5"
+              onClick={() => setShowShare(true)}
+            >
+              <Share2 className="w-3 h-3" />
+              Share
+            </Button>
+          </div>
+        }
       />
+
+      {showShare && id && <ShareModal sessionId={id} onClose={() => setShowShare(false)} />}
+
       <div className="flex-1 overflow-hidden flex">
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {(!messages || messages.length === 0) && !isStreaming && (
+            {(!messages || messages.length === 0) && !isStreaming && !wsState.isRemoteStreaming && (
               <div className="text-center py-16 text-muted-foreground">
                 <Bot className="w-10 h-10 mx-auto mb-3 opacity-30" />
                 <p className="text-sm">Start a conversation</p>
@@ -237,10 +361,25 @@ export default function Chat() {
             )}
             {messages?.map((msg) => <MessageBubble key={msg.id} msg={msg} />)}
             {streamingMsg && <MessageBubble msg={streamingMsg} isStreaming />}
+            {remoteStreamingMsg && <MessageBubble msg={remoteStreamingMsg} isStreaming />}
             <div ref={bottomRef} />
           </div>
 
           <div className="border-t border-border p-4">
+            {/* Collaborator typing indicators */}
+            {otherParticipants.length > 0 && (
+              <div className="flex items-center gap-2 mb-2 px-1">
+                <div className="flex -space-x-1">
+                  {otherParticipants.slice(0, 3).map((p) => (
+                    <div key={p.id} className="w-4 h-4 rounded-full ring-1 ring-background" style={{ backgroundColor: p.color }} />
+                  ))}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {otherParticipants.map((p) => p.name).join(", ")} {otherParticipants.length === 1 ? "is" : "are"} in this session
+                </span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              </div>
+            )}
             <div className="flex gap-3 items-end">
               <Textarea
                 value={input}
@@ -262,7 +401,7 @@ export default function Chat() {
                 {isStreaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </Button>
             </div>
-            {isStreaming && (
+            {(isStreaming || wsState.isRemoteStreaming) && (
               <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1.5">
                 <Loader2 className="w-3 h-3 animate-spin" /> Agent is thinking...
               </p>
@@ -270,7 +409,31 @@ export default function Chat() {
           </div>
         </div>
 
+        {/* Right panel: Agents + Participants */}
         <div className="w-60 border-l border-border flex flex-col flex-shrink-0">
+          {/* Live collaborators */}
+          {wsState.connected && wsState.participants.length > 1 && (
+            <div className="border-b border-border">
+              <div className="h-9 flex items-center px-4">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Collaborators
+                </span>
+              </div>
+              <div className="px-3 pb-3 space-y-1.5">
+                {wsState.participants.map((p) => (
+                  <div key={p.id} className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white" style={{ backgroundColor: p.color }}>
+                      {p.name[0]}
+                    </div>
+                    <span className="text-xs text-foreground">{p.name}</span>
+                    {p.id === wsState.me?.id && <span className="text-xs text-muted-foreground ml-auto">(you)</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="h-10 border-b border-border flex items-center px-4">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Agents</span>
           </div>
@@ -282,11 +445,9 @@ export default function Chat() {
                     <Cpu className={`w-3 h-3 flex-shrink-0 ${AGENT_COLORS[agent.type] ?? "text-muted-foreground"}`} />
                     <span className="text-xs font-medium capitalize">{agent.type}</span>
                   </div>
-                  <StatusBadge value={isStreaming && agent.type === "coding" ? "running" : agent.status} />
+                  <StatusBadge value={(isStreaming || wsState.isRemoteStreaming) && agent.type === "coding" ? "running" : agent.status} />
                 </div>
-                {agent.currentTask && (
-                  <p className="text-xs text-muted-foreground mt-1.5 truncate">{agent.currentTask}</p>
-                )}
+                {agent.currentTask && <p className="text-xs text-muted-foreground mt-1.5 truncate">{agent.currentTask}</p>}
                 <p className="text-xs text-muted-foreground mt-1">{agent.tasksCompleted} tasks</p>
               </div>
             ))}
