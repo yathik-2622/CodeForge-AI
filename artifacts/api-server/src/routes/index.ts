@@ -9,11 +9,13 @@ import deploymentsRouter from "./deployments";
 import dashboardRouter from "./dashboard";
 import authRouter from "./auth";
 import githubRouter from "./github";
+import whatsappRouter from "./whatsapp";
 
 const router: IRouter = Router();
 
 router.use(authRouter);
 router.use(githubRouter);
+router.use(whatsappRouter);
 router.use(healthRouter);
 router.use(repositoriesRouter);
 router.use(sessionsRouter);

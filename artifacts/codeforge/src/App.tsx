@@ -12,6 +12,7 @@ import Terminal from "@/pages/Terminal";
 import Security from "@/pages/Security";
 import Deployments from "@/pages/Deployments";
 import Login from "@/pages/Login";
+import WhatsApp from "@/pages/WhatsApp";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -35,6 +36,7 @@ function Router() {
       <Route path="/terminal" component={Terminal} />
       <Route path="/security" component={Security} />
       <Route path="/deployments" component={Deployments} />
+      <Route path="/whatsapp" component={WhatsApp} />
       <Route component={NotFound} />
     </Switch>
   );

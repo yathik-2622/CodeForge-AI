@@ -11,6 +11,7 @@ import {
   LogOut,
   LogIn,
   Globe,
+  MessageCircle,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -21,6 +22,7 @@ const nav = [
   { icon: Terminal, label: "Terminal", path: "/terminal" },
   { icon: Shield, label: "Security", path: "/security" },
   { icon: Rocket, label: "Deployments", path: "/deployments" },
+  { icon: MessageCircle, label: "WhatsApp", path: "/whatsapp" },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {

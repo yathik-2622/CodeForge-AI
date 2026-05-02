@@ -1,6 +1,20 @@
-# CodeForge AI
+# ⚡ CodeForge AI
 
-A production-grade autonomous coding agent SaaS platform. Multi-agent orchestration, real GitHub integration, open-source LLMs via OpenRouter, web search via Tavily, streaming responses, security monitoring, and deployment tracking.
+> Autonomous AI coding agent — web app, VS Code extension, CLI, and WhatsApp integration.
+
+Use it from **anywhere**: browser, VS Code sidebar, terminal, or WhatsApp.  
+Powered by **free open-source LLMs** (Mistral, Llama 3, Phi-3, Gemma 3) via OpenRouter.
+
+---
+
+## Interfaces
+
+| Interface | How |
+|-----------|-----|
+| 🌐 **Web App** | Full dashboard at your deployed URL |
+| 🧩 **VS Code Extension** | Sidebar chat, explain/fix/test code, keyboard shortcuts |
+| 💻 **CLI** | `codeforge chat "..."` on Windows, Linux, macOS |
+| 📱 **WhatsApp** | Send a message to your Twilio number → AI responds |
 
 ---
 
