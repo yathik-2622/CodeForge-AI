@@ -11,10 +11,10 @@ function ExecutionRow({ exec }: { exec: any }) {
   const [expanded, setExpanded] = useState(false);
   const statusIcons: Record<string, React.ReactNode> = {
     success: <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />,
-    error: <AlertTriangle className="w-3.5 h-3.5 text-red-400" />,
+    error:   <AlertTriangle className="w-3.5 h-3.5 text-red-400" />,
     blocked: <AlertTriangle className="w-3.5 h-3.5 text-red-400" />,
     running: <Loader className="w-3.5 h-3.5 text-blue-400 animate-spin" />,
-    queued: <Clock className="w-3.5 h-3.5 text-yellow-400" />,
+    queued:  <Clock className="w-3.5 h-3.5 text-yellow-400" />,
   };
   return (
     <div className="border border-card-border rounded-lg overflow-hidden" data-testid={`execution-${exec.id}`}>
@@ -60,12 +60,8 @@ export default function Terminal() {
 
   return (
     <Layout>
-      <PageHeader
-        title="Terminal"
-        description="Sandboxed command execution"
-      />
+      <PageHeader title="Terminal" description="Sandboxed command execution" />
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
-        {/* Command input */}
         <div className="bg-card border border-card-border rounded-lg p-4">
           <div className="flex items-center gap-2 mb-3">
             <TerminalIcon className="w-4 h-4 text-primary" />
@@ -89,8 +85,6 @@ export default function Terminal() {
           </div>
           <p className="text-xs text-muted-foreground mt-2">Destructive commands (rm -rf, DROP TABLE, etc.) are automatically blocked for safety.</p>
         </div>
-
-        {/* Executions */}
         <div className="space-y-2">
           {sorted.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
