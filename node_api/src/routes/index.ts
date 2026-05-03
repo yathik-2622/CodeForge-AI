@@ -1,15 +1,16 @@
 import { Router, type IRouter } from "express";
-import healthRouter from "./health";
+import healthRouter      from "./health";
 import repositoriesRouter from "./repositories";
-import sessionsRouter from "./sessions";
-import agentsRouter from "./agents";
-import executionsRouter from "./executions";
-import securityRouter from "./security";
+import sessionsRouter    from "./sessions";
+import agentsRouter      from "./agents";
+import executionsRouter  from "./executions";
+import securityRouter    from "./security";
 import deploymentsRouter from "./deployments";
-import dashboardRouter from "./dashboard";
-import authRouter from "./auth";
-import githubRouter from "./github";
-import whatsappRouter from "./whatsapp";
+import dashboardRouter   from "./dashboard";
+import authRouter        from "./auth";
+import githubRouter      from "./github";
+import whatsappRouter    from "./whatsapp";
+import modelsRouter      from "./models";
 
 const router: IRouter = Router();
 
@@ -17,6 +18,7 @@ router.use(authRouter);
 router.use(githubRouter);
 router.use(whatsappRouter);
 router.use(healthRouter);
+router.use(modelsRouter);
 router.use(repositoriesRouter);
 router.use(sessionsRouter);
 router.use(agentsRouter);
