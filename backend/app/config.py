@@ -1,6 +1,5 @@
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -22,19 +21,15 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_days: int = 30
 
-    # OpenRouter / AI
+    # AI — OpenRouter
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     ai_model: str = "mistralai/mistral-7b-instruct:free"
     ai_temperature: float = 0.2
     max_tokens: int = 4096
 
-    free_models: list[dict] = [
-        {"id": "mistralai/mistral-7b-instruct:free", "label": "Mistral 7B", "context": 32768},
-        {"id": "meta-llama/llama-3-8b-instruct:free", "label": "Llama 3 8B", "context": 8192},
-        {"id": "microsoft/phi-3-mini-128k-instruct:free", "label": "Phi-3 Mini", "context": 131072},
-        {"id": "google/gemma-3-12b-it:free", "label": "Gemma 3 12B", "context": 131072},
-    ]
+    # AI — Groq
+    groq_api_key: str = ""
 
     # MongoDB
     mongodb_url: str = "mongodb://localhost:27017"
@@ -44,7 +39,7 @@ class Settings(BaseSettings):
     qdrant_url: str = ""
     qdrant_api_key: str = ""
     qdrant_collection: str = "codeforge_repos"
-    qdrant_vector_size: int = 384  # all-MiniLM-L6-v2
+    qdrant_vector_size: int = 384
 
     # GitHub OAuth
     github_client_id: str = ""
@@ -59,7 +54,7 @@ class Settings(BaseSettings):
     twilio_whatsapp_from: str = ""
     twilio_instagram_from: str = ""
 
-    # Aliases for backward-compat uppercase access
+    # Aliases (uppercase access)
     @property
     def PORT(self): return self.port
     @property
@@ -79,7 +74,7 @@ class Settings(BaseSettings):
     @property
     def DEFAULT_MODEL(self): return self.ai_model
     @property
-    def FREE_MODELS(self): return self.free_models
+    def GROQ_API_KEY(self): return self.groq_api_key
     @property
     def MONGODB_URL(self): return self.mongodb_url
     @property
