@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
-import { Cpu } from "lucide-react";
+import { CodeForgeLogo } from "@/components/CodeForgeLogo";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import Repositories from "@/pages/Repositories";
@@ -25,8 +25,8 @@ function LoadingScreen() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="flex flex-col items-center gap-4">
-        <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center animate-pulse">
-          <Cpu className="w-7 h-7 text-primary-foreground" />
+        <div className="w-12 h-12 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center animate-pulse">
+          <CodeForgeLogo className="w-7 h-7 text-primary" />
         </div>
         <p className="text-sm text-muted-foreground">Loading CodeForge AI…</p>
       </div>
