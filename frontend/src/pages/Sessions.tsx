@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useListSessions, useCreateSession, getListSessionsQueryKey } from "../lib/api";
+import { useListSessions, useCreateSession, useListModels, getListSessionsQueryKey } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout, PageHeader } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -14,13 +14,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-const FREE_MODELS = [
-  { id: "mistralai/mistral-7b-instruct:free", label: "Mistral 7B", badge: "Fast" },
-  { id: "meta-llama/llama-3-8b-instruct:free", label: "Llama 3 8B", badge: "Open Source" },
-  { id: "microsoft/phi-3-mini-128k-instruct:free", label: "Phi-3 Mini", badge: "128k ctx" },
-  { id: "google/gemma-3-12b-it:free", label: "Gemma 3 12B", badge: "Google" },
+const FALLBACK_MODELS = [
+  { id: "mistralai/mistral-7b-instruct:free",      label: "Mistral 7B Instruct",     provider: "openrouter" as const, context: 32768,  badge: "Fast"      },
+  { id: "meta-llama/llama-3.1-8b-instruct:free",   label: "Llama 3.1 8B Instruct",   provider: "openrouter" as const, context: 131072, badge: "128k ctx"  },
+  { id: "google/gemma-3-12b-it:free",              label: "Gemma 3 12B",             provider: "openrouter" as const, context: 131072, badge: "Google"    },
+  { id: "deepseek/deepseek-r1:free",               label: "DeepSeek R1",             provider: "openrouter" as const, context: 163840, badge: "Reasoning" },
+  { id: "groq/llama-3.3-70b-versatile",            label: "Llama 3.3 70B Versatile", provider: "groq" as const,       context: 131072, badge: "Groq Fast" },
 ];
 
 const createSchema = z.object({
@@ -33,17 +34,22 @@ export default function Sessions() {
   const [, setLocation] = useLocation();
   const [open, setOpen] = useState(false);
   const { data: sessions } = useListSessions();
+  const { data: apiModels } = useListModels();
+  const models = apiModels && apiModels.length > 0 ? apiModels : FALLBACK_MODELS;
   const create = useCreateSession();
   const qc = useQueryClient();
 
+  const orModels  = models.filter((m) => m.provider === "openrouter");
+  const groqModels = models.filter((m) => m.provider === "groq");
+
   const form = useForm<CreateForm>({
     resolver: zodResolver(createSchema),
-    defaultValues: { title: "", model: FREE_MODELS[0].id },
+    defaultValues: { title: "", model: models[0]?.id ?? FALLBACK_MODELS[0].id },
   });
 
   const onSubmit = (data: CreateForm) => {
-    create.mutate({ data: { ...data, repositoryId: null } }, {
-      onSuccess: (session) => {
+    create.mutate({ data: { ...data, repositoryId: null } } as any, {
+      onSuccess: (session: any) => {
         qc.invalidateQueries({ queryKey: getListSessionsQueryKey() });
         setOpen(false);
         form.reset();
@@ -53,13 +59,21 @@ export default function Sessions() {
   };
 
   const modelLabel = (id: string) =>
-    FREE_MODELS.find((m) => m.id === id)?.label ?? id.split("/").pop()?.replace(":free", "") ?? id;
+    models.find((m) => m.id === id)?.label ??
+    id.split("/").pop()?.replace(/:free$/, "") ??
+    id;
+
+  const modelBadge = (id: string) =>
+    models.find((m) => m.id === id)?.badge ?? "";
+
+  const fmtCtx = (n: number) =>
+    n >= 131072 ? "128k+" : n >= 32768 ? "32k" : "8k";
 
   return (
     <Layout>
       <PageHeader
         title="Agent Sessions"
-        description={`${sessions?.length ?? 0} sessions — all powered by free OpenRouter models`}
+        description={`${sessions?.length ?? 0} sessions · ${models.length} models available (OpenRouter + Groq, all free)`}
         action={
           <Button size="sm" onClick={() => setOpen(true)} data-testid="button-new-session">
             <Plus className="w-3.5 h-3.5 mr-1.5" /> New Session
@@ -110,6 +124,11 @@ export default function Sessions() {
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
                     <Zap className="w-3 h-3 text-primary" />
                     {modelLabel(session.model)}
+                    {modelBadge(session.model) && (
+                      <span className="ml-1 px-1.5 py-px bg-primary/10 text-primary rounded text-[10px]">
+                        {modelBadge(session.model)}
+                      </span>
+                    )}
                   </span>
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
                     <Cpu className="w-3 h-3" />
@@ -126,7 +145,7 @@ export default function Sessions() {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>New Agent Session</DialogTitle>
           </DialogHeader>
@@ -143,22 +162,48 @@ export default function Sessions() {
               )} />
               <FormField control={form.control} name="model" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>AI Model</FormLabel>
+                  <FormLabel>AI Model <span className="text-muted-foreground font-normal">(all free)</span></FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger data-testid="select-model">
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
-                      {FREE_MODELS.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          <span className="flex items-center gap-2">
-                            {m.label}
-                            <span className="text-xs text-muted-foreground">· {m.badge} · Free</span>
-                          </span>
-                        </SelectItem>
-                      ))}
+                    <SelectContent className="max-h-72">
+                      {orModels.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                            OpenRouter · Free
+                          </SelectLabel>
+                          {orModels.map((m) => (
+                            <SelectItem key={m.id} value={m.id}>
+                              <span className="flex items-center gap-2">
+                                {m.label}
+                                <span className="text-xs text-muted-foreground">
+                                  {m.badge ? `· ${m.badge}` : ""} · {fmtCtx(m.context)} ctx
+                                </span>
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                      {groqModels.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mt-1">
+                            Groq · Ultra-fast inference
+                          </SelectLabel>
+                          {groqModels.map((m) => (
+                            <SelectItem key={m.id} value={m.id}>
+                              <span className="flex items-center gap-2">
+                                {m.label}
+                                <span className="text-xs text-muted-foreground">
+                                  {m.badge ? `· ${m.badge}` : ""} · {fmtCtx(m.context)} ctx
+                                </span>
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
                     </SelectContent>
                   </Select>
                   <FormMessage />
