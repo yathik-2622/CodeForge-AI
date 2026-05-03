@@ -1,143 +1,161 @@
-# CodeForge AI
+# CodeForge AI ⚡
 
-> Autonomous AI coding platform — browser app, CLI, VS Code extension, and WhatsApp bot. 23 free AI models, zero cost.
+> **Autonomous coding platform** · 23 free AI models · CLI · VS Code extension · WhatsApp bot
 
-[![GitHub](https://img.shields.io/badge/GitHub-yathik--2622%2FCodeForge--AI-blue?logo=github)](https://github.com/yathik-2622/CodeForge-AI)
-
----
-
-## Components
-
-| Component | Port | Description |
-|---|---|---|
-| **Frontend** (React+Vite) | 5173 | Landing page → GitHub login → Dashboard |
-| **Node API** (Express/TS) | 3000 | AI streaming, GitHub OAuth, WebSocket, sessions |
-| **FastAPI** (Python) | 9000 | LangGraph agents, MongoDB, Tavily, WhatsApp |
-| **CLI** (`cf`) | — | 8 commands: ask, fix, explain, commit, generate, analyze, models, status |
-| **VS Code Extension** | — | Chat, fix, explain, generate tests |
-| **WhatsApp Bot** | — | Code answers via WhatsApp (Twilio) |
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![OpenRouter](https://img.shields.io/badge/OpenRouter-free%20models-violet)](https://openrouter.ai)
+[![Groq](https://img.shields.io/badge/Groq-blazing%20fast-yellow)](https://console.groq.com)
 
 ---
 
-## Setup
+## What is CodeForge AI?
 
-### node_api/.env (required)
-```env
-MONGODB_URL=mongodb+srv://USER:PASS@cluster.mongodb.net
-MONGODB_DB=codeforge
-OPENROUTER_API_KEY=sk-or-v1-...
-GROQ_API_KEY=gsk_...
-GITHUB_CLIENT_ID=your_id
-GITHUB_CLIENT_SECRET=your_secret
-SESSION_SECRET=any-32-char-string
-FRONTEND_URL=http://localhost:5173
-PORT=3000
-```
-> If `MONGODB_URL` is missing, the API starts in offline mode (empty data, no crash).
+CodeForge AI is a full-stack developer platform that combines:
 
-### GitHub OAuth App
-- Authorization callback URL: `http://localhost:3000/api/auth/github/callback`
-
-### Start servers
-```bash
-# Node API
-cd node_api && npm install && npm run dev
-
-# FastAPI
-cd backend && pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 9000 --reload
-
-# Frontend
-cd frontend && npm install && npm run dev
-```
+- **23 free AI models** from OpenRouter and Groq (Llama 4, Gemma 3, DeepSeek R1, Qwen 3, and more)
+- **Multi-agent orchestration** — planner, coder, researcher, and reviewer agents working in parallel
+- **GitHub integration** — connect any repo and let AI read, analyze, and fix your code
+- **CLI tool** (`cf`) — `ask`, `fix`, `explain`, `commit`, `generate`, `analyze` from any terminal
+- **VS Code extension** — AI chat, bug fixes, and code generation inside your editor
+- **WhatsApp bot** — get code answers via Twilio on WhatsApp
+- **Security scanning** — automated detection of secrets, SQL injection, XSS, and OWASP issues
 
 ---
 
-## CLI (`cf`)
+## 🚀 Quick start (local)
+
+### Prerequisites
+- Node.js ≥ 18, Python ≥ 3.11
+- An [OpenRouter](https://openrouter.ai/keys) API key (free tier: 10 models)
+- A [Groq](https://console.groq.com/keys) API key (free tier: 8 fast models)
+- A GitHub OAuth App ([create one](https://github.com/settings/developers))
+- MongoDB Atlas (optional — runs in offline mode without it)
+
+### 1. Clone the repo
 
 ```bash
-cd cli && npm run build && npm link
-
-cf config --openrouter-key sk-or-v1-...   # save OpenRouter key
-cf config --groq-key gsk_...              # save Groq key
-cf config --model google/gemma-2-9b-it:free
-
-cf ask "explain async/await"
-cf fix src/app.ts
-cf explain src/auth.py
-cf analyze src/routes.ts
-cf commit
-cf generate "FastAPI endpoint for user auth with JWT"
-cf models                                 # list all 23 models
-cf status                                 # check API health
+git clone https://github.com/yathik-2622/CodeForge-AI.git
+cd CodeForge-AI
 ```
 
----
-
-## Free Models
-
-### OpenRouter (free tier)
-| Model ID | Notes |
-|---|---|
-| `google/gemma-2-9b-it:free` | **Default** |
-| `google/gemma-3-12b-it:free` | 128k context |
-| `meta-llama/llama-3.1-8b-instruct:free` | 128k context |
-| `meta-llama/llama-3.2-3b-instruct:free` | Fastest |
-| `deepseek/deepseek-r1:free` | Reasoning |
-| `deepseek/deepseek-r1-distill-llama-70b:free` | Reasoning 70B |
-| `qwen/qwen-2.5-7b-instruct:free` | Alibaba |
-| `mistralai/mistral-nemo:free` | 12B |
-| `microsoft/phi-3-mini-128k-instruct:free` | 128k context |
-| `openchat/openchat-7b:free` | Chat |
-| `mistralai/mistral-small-3.2-24b-instruct:free` | 24B |
-
-### Groq (blazing fast)
-| Model ID | Notes |
-|---|---|
-| `groq/llama-3.3-70b-versatile` | Best quality |
-| `groq/llama-3.1-8b-instant` | Fastest |
-| `groq/meta-llama/llama-4-scout-17b-16e-instruct` | Newest |
-| `groq/compound-beta` | Groq agent |
-| `groq/compound-beta-mini` | Groq agent mini |
-| `groq/qwen/qwen3-32b` | Alibaba via Groq |
-| `groq/openai/gpt-oss-120b` | OpenAI via Groq |
-| `groq/openai/gpt-oss-20b` | OpenAI via Groq |
-
----
-
-## Auth Flow
-
-1. User visits `/` → sees **landing page** (unauthenticated)
-2. Clicks **Sign in with GitHub** → `/api/auth/github`
-3. GitHub OAuth → callback sets `auth_token` cookie
-4. Redirects to `/` → user sees **dashboard** (authenticated)
-
----
-
-## VS Code Extension
+### 2. Start the Node API
 
 ```bash
-cd vscode-extension
+cd node_api
+cp .env.example .env     # fill in your keys (see table below)
 npm install
-npx vsce package --no-dependencies   # answer y to LICENSE warning
-code --install-extension codeforge-ai-0.1.0.vsix
+npm run dev              # starts on http://localhost:3000
 ```
 
-Commands: Open Chat, Ask About Selection, Fix This Code, Explain Selection, Generate Tests
+### 3. Start the frontend
+
+```bash
+cd ../frontend
+# frontend/.env is already committed with VITE_API_URL=http://localhost:3000
+npm install
+npm run dev              # starts on http://localhost:5173
+```
+
+Open **http://localhost:5173** in your browser.
+
+### 4. Install the CLI
+
+```bash
+cd ../cli
+npm install
+npm run build
+npm link
+cf --version             # verify
+```
 
 ---
 
-## WhatsApp Bot
+## 🔑 Environment variables
 
-```env
-TWILIO_ACCOUNT_SID=ACxxx
-TWILIO_AUTH_TOKEN=xxx
-TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
-```
-Webhook: `POST /api/whatsapp/webhook`
+### `node_api/.env`
+
+| Variable | Description |
+|---|---|
+| `OPENROUTER_API_KEY` | [openrouter.ai/keys](https://openrouter.ai/keys) — free tier gives 10 models |
+| `GROQ_API_KEY` | [console.groq.com/keys](https://console.groq.com/keys) — free tier |
+| `GITHUB_CLIENT_ID` | GitHub OAuth App client ID |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret |
+| `SESSION_SECRET` | Any random 32+ character string |
+| `FRONTEND_URL` | Where the frontend runs — **must be `http://localhost:5173`** for local dev |
+| `MONGODB_URL` | MongoDB Atlas connection string (optional — offline mode without it) |
+| `MONGODB_DB` | Database name (default: `codeforge`) |
+
+### GitHub OAuth App setup
+
+1. Go to [GitHub Settings → Developer settings → OAuth Apps](https://github.com/settings/developers)
+2. Create a new OAuth App with:
+   - **Homepage URL**: `http://localhost:5173`
+   - **Authorization callback URL**: `http://localhost:3000/api/auth/github/callback`
 
 ---
 
-## License
+## 🤖 Free AI models
 
-MIT
+### OpenRouter (13 models)
+| Model | Context |
+|---|---|
+| meta-llama/llama-3.2-3b-instruct:free | 128k |
+| meta-llama/llama-3.1-8b-instruct:free | 128k |
+| google/gemma-3-12b-it:free | 128k |
+| deepseek/deepseek-r1:free | 163k |
+| deepseek/deepseek-r1-distill-llama-70b:free | 128k |
+| qwen/qwen-2.5-7b-instruct:free | 128k |
+| mistralai/mistral-nemo:free | 128k |
+| microsoft/phi-3-mini-128k-instruct:free | 128k |
+| mistralai/mistral-small-3.2-24b-instruct:free | 128k |
+| openchat/openchat-7b:free | 8k |
+
+### Groq (8 models — blazing fast)
+| Model |
+|---|
+| llama-3.3-70b-versatile |
+| llama-3.1-8b-instant |
+| meta-llama/llama-4-scout-17b-16e-instruct |
+| compound-beta |
+| compound-beta-mini |
+| qwen/qwen3-32b |
+| openai/gpt-oss-120b |
+| openai/gpt-oss-20b |
+
+---
+
+## 💻 CLI usage (`cf`)
+
+```bash
+cf config set openRouterKey sk-or-v1-...   # set your OpenRouter key
+cf config set groqKey gsk_...              # set your Groq key
+cf config set model groq/llama-3.3-70b-versatile   # choose a model
+
+cf ask "how do I debounce in React?"       # chat with AI
+cf fix src/app.ts                          # auto-fix a file
+cf explain src/main.py                     # plain-English explanation
+cf commit                                  # AI-generated commit message
+cf generate "REST API with auth"           # generate a complete file
+cf analyze src/auth.ts                     # deep review + security scan
+cf models                                  # list all 23 free models
+```
+
+---
+
+## 🏗️ Project structure
+
+```
+CodeForge-AI/
+├── frontend/          # React + Vite + Tailwind frontend (port 5173)
+├── node_api/          # Node.js + Express API (port 3000)
+├── backend/           # Python FastAPI backend (port 9000)
+├── cli/               # `cf` CLI tool (npm package)
+├── vscode-extension/  # VS Code extension
+└── whatsapp-bot/      # WhatsApp bot via Twilio
+```
+
+---
+
+## 📝 License
+
+MIT © [yathik-2622](https://github.com/yathik-2622)
