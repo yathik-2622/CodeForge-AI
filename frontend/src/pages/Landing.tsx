@@ -3,9 +3,10 @@ import { useLocation } from "wouter";
 import { useAuth, getLoginUrl } from "@/lib/auth";
 import { SiGithub } from "react-icons/si";
 import {
-  Cpu, GitBranch, Shield, Zap, Globe, Terminal,
-  Code2, Bot, MessageSquare, Rocket, Star, ChevronRight, Package,
+  GitBranch, Shield, Zap, Globe, Terminal,
+  Code2, Bot, MessageSquare, Rocket, Star, ChevronRight, Package, Cpu,
 } from "lucide-react";
+import { CodeForgeLogo } from "@/components/CodeForgeLogo";
 
 const FEATURES = [
   {
@@ -111,8 +112,8 @@ export default function Landing() {
       <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/5 bg-[hsl(222_47%_4%)]/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Cpu className="w-5 h-5 text-primary-foreground" />
+            <div className="w-8 h-8 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
+              <CodeForgeLogo className="w-5 h-5 text-primary" />
             </div>
             <span className="font-bold text-lg tracking-tight">
               CodeForge <span className="text-primary">AI</span>
@@ -332,7 +333,7 @@ export default function Landing() {
       <section className="py-24 px-6 text-center">
         <div className="max-w-2xl mx-auto">
           <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 to-violet-500/5 p-12">
-            <Cpu className="w-12 h-12 text-primary mx-auto mb-6" />
+            <CodeForgeLogo className="w-12 h-12 text-primary mx-auto mb-6" />
             <h2 className="text-3xl font-bold mb-4">Ready to code smarter?</h2>
             <p className="text-muted-foreground mb-8">
               Sign in with GitHub and start using 23 free AI models to ship better code, faster.
