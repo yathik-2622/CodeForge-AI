@@ -1,7 +1,30 @@
 import * as vscode from "vscode";
-import * as path from "path";
 import { CodeForgeClient } from "../client";
-import { getNonce, getWebviewUri } from "../util";
+import { getNonce } from "../util";
+
+const OR_MODELS = [
+  { id: "mistralai/mistral-7b-instruct:free",          label: "Mistral 7B",              group: "OpenRouter" },
+  { id: "meta-llama/llama-3.1-8b-instruct:free",       label: "Llama 3.1 8B",            group: "OpenRouter" },
+  { id: "meta-llama/llama-3-8b-instruct:free",         label: "Llama 3 8B",              group: "OpenRouter" },
+  { id: "microsoft/phi-3-mini-128k-instruct:free",     label: "Phi-3 Mini 128k",         group: "OpenRouter" },
+  { id: "google/gemma-3-12b-it:free",                  label: "Gemma 3 12B",             group: "OpenRouter" },
+  { id: "google/gemma-2-9b-it:free",                   label: "Gemma 2 9B",              group: "OpenRouter" },
+  { id: "deepseek/deepseek-r1:free",                   label: "DeepSeek R1",             group: "OpenRouter" },
+  { id: "deepseek/deepseek-r1-distill-llama-70b:free", label: "DeepSeek R1 Distill 70B", group: "OpenRouter" },
+  { id: "qwen/qwen-2.5-7b-instruct:free",              label: "Qwen 2.5 7B",             group: "OpenRouter" },
+  { id: "mistralai/mistral-nemo:free",                 label: "Mistral Nemo 12B",        group: "OpenRouter" },
+  { id: "openchat/openchat-7b:free",                   label: "OpenChat 7B",             group: "OpenRouter" },
+];
+const GROQ_MODELS = [
+  { id: "groq/llama-3.3-70b-versatile",         label: "Llama 3.3 70B ⚡",    group: "Groq" },
+  { id: "groq/llama-3.1-8b-instant",            label: "Llama 3.1 8B ⚡",     group: "Groq" },
+  { id: "groq/llama3-70b-8192",                 label: "Llama 3 70B ⚡",      group: "Groq" },
+  { id: "groq/llama3-8b-8192",                  label: "Llama 3 8B ⚡",       group: "Groq" },
+  { id: "groq/mixtral-8x7b-32768",              label: "Mixtral 8x7B ⚡",     group: "Groq" },
+  { id: "groq/gemma2-9b-it",                    label: "Gemma 2 9B ⚡",       group: "Groq" },
+  { id: "groq/deepseek-r1-distill-llama-70b",   label: "DeepSeek R1 70B ⚡",  group: "Groq" },
+];
+const ALL_MODELS = [...OR_MODELS, ...GROQ_MODELS];
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
@@ -31,8 +54,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           await this._handleSend(msg.content);
           break;
         case "newSession":
-          await this.createSession(msg.title ?? "New Session");
+          await this.createSession(msg.title ?? "New Session", msg.model);
           break;
+        case "changeModel": {
+          const cfg = vscode.workspace.getConfiguration("codeforge");
+          await cfg.update("model", msg.model, vscode.ConfigurationTarget.Global);
+          break;
+        }
         case "openBrowser":
           vscode.env.openExternal(vscode.Uri.parse(this.client.baseUrl));
           break;
@@ -53,9 +81,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  async createSession(title: string) {
+  /** Called by extension.ts when selectModel command changes the model */
+  postModelChange(modelId: string, label: string) {
+    this._view?.webview.postMessage({ type: "modelChanged", modelId, label });
+  }
+
+  async createSession(title: string, model?: string) {
     try {
-      const session = await this.client.createSession(title);
+      const cfg = vscode.workspace.getConfiguration("codeforge");
+      const chosenModel = model ?? cfg.get<string>("model", ALL_MODELS[0].id);
+      const session = await this.client.createSession(title, chosenModel);
       this._sessionId = session.id;
       await this.client.setCurrentSessionId(session.id);
       this._view?.webview.postMessage({ type: "sessionCreated", session });
@@ -66,7 +101,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   async sendMessage(content: string) {
     if (!this._sessionId) {
-      const session = await this.client.createSession("VS Code Session");
+      const cfg = vscode.workspace.getConfiguration("codeforge");
+      const model = cfg.get<string>("model", ALL_MODELS[0].id);
+      const session = await this.client.createSession("VS Code Session", model);
       this._sessionId = session.id;
       await this.client.setCurrentSessionId(session.id);
       this._view?.webview.postMessage({ type: "sessionCreated", session });
@@ -89,175 +126,96 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private async _handleSend(content: string) {
     if (!content?.trim()) return;
-
     if (!this._sessionId) {
       await this.createSession("VS Code Session");
     }
-
     const sessionId = this._sessionId!;
-
     const cfg = vscode.workspace.getConfiguration("codeforge");
     let finalContent = content;
     if (cfg.get<boolean>("includeFileContext", true)) {
       const editor = vscode.window.activeTextEditor;
-      if (editor && !content.includes("```")) {
-        const fileName = editor.document.fileName.split(/[\\/]/).pop();
-        const lang = editor.document.languageId;
-        const sel = editor.selection;
-        const selectedText = sel.isEmpty ? "" : editor.document.getText(sel);
-        if (selectedText) {
-          finalContent = `${content}\n\n**File:** \`${fileName}\` (selection)\n\`\`\`${lang}\n${selectedText}\n\`\`\``;
+      if (editor) {
+        const doc  = editor.document;
+        const lang = doc.languageId;
+        const rel  = vscode.workspace.asRelativePath(doc.uri);
+        const sel  = editor.selection;
+        const text = sel.isEmpty
+          ? doc.getText().slice(0, 6000)
+          : doc.getText(sel);
+        if (text.trim()) {
+          finalContent += `\n\n**Context: \`${rel}\`**\n\`\`\`${lang}\n${text}\n\`\`\``;
         }
       }
     }
-
-    this._view?.webview.postMessage({ type: "userMessage", content: finalContent });
-
-    try {
-      await this.client.sendMessage(sessionId, finalContent);
-    } catch (err: any) {
-      this._view?.webview.postMessage({ type: "error", message: err.message });
-      return;
-    }
-
+    this._view?.webview.postMessage({ type: "userMessage", content });
     this._view?.webview.postMessage({ type: "streamStart" });
     try {
-      for await (const chunk of this.client.streamResponse(sessionId)) {
-        this._view?.webview.postMessage(chunk);
+      await this.client.sendMessage(sessionId, finalContent);
+      for await (const event of this.client.streamResponse(sessionId)) {
+        if (event.type === "token" && event.token) {
+          this._view?.webview.postMessage({ type: "token", token: event.token });
+        } else if (event.type === "route" && event.plan) {
+          this._view?.webview.postMessage({ type: "route", plan: event.plan });
+        } else if (event.type === "done") {
+          this._view?.webview.postMessage({ type: "streamEnd" });
+          return;
+        }
       }
+      this._view?.webview.postMessage({ type: "streamEnd" });
     } catch (err: any) {
       this._view?.webview.postMessage({ type: "error", message: err.message });
     }
-    this._view?.webview.postMessage({ type: "streamEnd" });
   }
 
   private _insertCode(code: string) {
     const editor = vscode.window.activeTextEditor;
-    if (!editor) {
-      vscode.window.showWarningMessage("No active editor to insert code into.");
-      return;
-    }
-    editor.edit((builder) => {
-      builder.replace(editor.selection, code);
-    });
+    if (!editor) return;
+    editor.edit((eb) => eb.replace(editor.selection, code));
   }
 
-  /**
-   * Apply to File — replaces the entire active file content with AI code,
-   * showing a diff view first so the user can review before accepting.
-   */
   private async _applyToFile(code: string, lang: string) {
     const editor = vscode.window.activeTextEditor;
-
-    if (!editor) {
-      // No active editor — ask user to pick a file
-      const picked = await vscode.window.showOpenDialog({
-        canSelectFiles: true,
-        canSelectFolders: false,
-        canSelectMany: false,
-        title: "Apply AI code to which file?",
-        filters: lang ? { [lang]: [lang] } : { "All Files": ["*"] },
-      });
-      if (!picked?.length) return;
-
-      const doc = await vscode.workspace.openTextDocument(picked[0]);
-      await vscode.window.showTextDocument(doc);
-      await this._showDiffAndApply(doc, code);
-      return;
-    }
-
-    await this._showDiffAndApply(editor.document, code);
+    if (!editor) { vscode.window.showErrorMessage("No active file."); return; }
+    const original = editor.document.getText();
+    await this._applyDiff(original, code, lang);
   }
 
-  /**
-   * Apply a diff with original and modified text, showing a proper diff editor.
-   */
-  private async _applyDiff(original: string, modified: string, lang: string) {
+  private async _applyDiff(original: string, modified: string, _lang: string) {
     const editor = vscode.window.activeTextEditor;
-    const original_uri = vscode.Uri.parse(`codeforge-diff:Original`);
-    const modified_uri = vscode.Uri.parse(`codeforge-diff:Modified (AI)`);
-
-    const dp = vscode.languages.registerDocumentContentProvider("codeforge-diff", {
-      provideTextDocumentContent(uri) {
-        return uri.path === "Original" ? original : modified;
-      },
-    });
-
-    await vscode.commands.executeCommand(
-      "vscode.diff",
-      original_uri,
-      modified_uri,
-      "CodeForge AI: Review Changes (accept by clicking ✓ Apply)",
+    if (!editor) return;
+    const choice = await vscode.window.showWarningMessage(
+      "Apply AI-generated code to the active file?",
+      { modal: true },
+      "Apply", "Discard",
     );
-
-    const choice = await vscode.window.showInformationMessage(
-      "Apply AI changes to the file?",
-      { modal: false },
-      "✓ Apply",
-      "✗ Discard",
-    );
-
-    dp.dispose();
-
-    if (choice === "✓ Apply" && editor) {
-      const full = new vscode.Range(
-        editor.document.lineAt(0).range.start,
-        editor.document.lineAt(editor.document.lineCount - 1).range.end,
-      );
-      await editor.edit((b) => b.replace(full, modified));
-      vscode.window.showInformationMessage("CodeForge: Changes applied!");
-    }
-  }
-
-  private async _showDiffAndApply(doc: vscode.TextDocument, newCode: string) {
-    const original = doc.getText();
-
-    // Write proposed code to a virtual document for diff view
-    const originalUri = doc.uri.with({ scheme: "codeforge-original" });
-    const proposedUri = doc.uri.with({ scheme: "codeforge-proposed" });
-
-    const provider = vscode.workspace.registerTextDocumentContentProvider("codeforge-original", {
-      provideTextDocumentContent: () => original,
-    });
-    const provider2 = vscode.workspace.registerTextDocumentContentProvider("codeforge-proposed", {
-      provideTextDocumentContent: () => newCode,
-    });
-
-    await vscode.commands.executeCommand(
-      "vscode.diff",
-      originalUri,
-      proposedUri,
-      `CodeForge AI → ${path.basename(doc.fileName)} (review changes)`,
-    );
-
-    const choice = await vscode.window.showInformationMessage(
-      "Apply AI-generated code to this file?",
-      { modal: false },
-      "✓ Apply",
-      "✗ Discard",
-    );
-
-    provider.dispose();
-    provider2.dispose();
-
-    if (choice === "✓ Apply") {
-      const edit = new vscode.WorkspaceEdit();
-      const fullRange = new vscode.Range(
-        doc.lineAt(0).range.start,
-        doc.lineAt(doc.lineCount - 1).range.end,
-      );
-      edit.replace(doc.uri, fullRange, newCode);
-      await vscode.workspace.applyEdit(edit);
-      await doc.save();
-      vscode.window.showInformationMessage(`CodeForge: Applied changes to ${path.basename(doc.fileName)}`);
+    if (choice === "Apply") {
+      await editor.edit((eb) => {
+        const full = new vscode.Range(
+          editor.document.positionAt(0),
+          editor.document.positionAt(original.length),
+        );
+        eb.replace(full, modified);
+      });
+      vscode.window.showInformationMessage("CodeForge: Changes applied.");
     } else {
       vscode.window.showInformationMessage("CodeForge: Changes discarded.");
     }
   }
 
   private _getHtml(webview: vscode.Webview): string {
-    const nonce = getNonce();
-    const serverUrl = vscode.workspace.getConfiguration("codeforge").get<string>("serverUrl", "http://localhost:3000");
+    const nonce      = getNonce();
+    const serverUrl  = vscode.workspace.getConfiguration("codeforge").get<string>("serverUrl", "http://localhost:3000");
+    const cfg        = vscode.workspace.getConfiguration("codeforge");
+    const curModel   = cfg.get<string>("model", ALL_MODELS[0].id);
+    const curLabel   = ALL_MODELS.find((m) => m.id === curModel)?.label ?? curModel;
+
+    // Build <option> HTML for the inline select
+    const orOptions   = OR_MODELS.map((m) =>
+      `<option value="${m.id}"${m.id === curModel ? " selected" : ""}>${m.label}</option>`
+    ).join("");
+    const groqOptions = GROQ_MODELS.map((m) =>
+      `<option value="${m.id}"${m.id === curModel ? " selected" : ""}>${m.label}</option>`
+    ).join("");
 
     return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -268,11 +226,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: var(--vscode-font-family); font-size: 12px; color: var(--vscode-foreground); background: var(--vscode-sideBar-background); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-    #header { padding: 8px 10px; border-bottom: 1px solid var(--vscode-sideBar-border); display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    #header { padding: 6px 10px; border-bottom: 1px solid var(--vscode-sideBar-border); display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
     #header-title { font-weight: 600; font-size: 11px; color: var(--vscode-sideBar-foreground); flex: 1; }
     #status-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; flex-shrink: 0; }
     button.icon-btn { background: none; border: none; cursor: pointer; color: var(--vscode-icon-foreground); padding: 2px; border-radius: 3px; display: flex; align-items: center; }
     button.icon-btn:hover { background: var(--vscode-toolbar-hoverBackground); }
+    #model-bar { padding: 5px 10px; border-bottom: 1px solid var(--vscode-sideBar-border); display: flex; align-items: center; gap-6px; background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); flex-shrink: 0; }
+    #model-bar label { font-size: 10px; color: var(--vscode-descriptionForeground); white-space: nowrap; margin-right: 5px; }
+    #model-select { flex: 1; font-size: 10px; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border); border-radius: 3px; color: var(--vscode-input-foreground); padding: 2px 4px; outline: none; cursor: pointer; }
+    #model-select:focus { border-color: var(--vscode-focusBorder); }
+    optgroup { font-size: 10px; }
     #messages { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
     .msg { display: flex; flex-direction: column; gap: 2px; max-width: 100%; }
     .msg.user { align-items: flex-end; }
@@ -285,19 +248,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     .code-lang { font-size: 10px; color: var(--vscode-descriptionForeground); background: var(--vscode-editor-background); padding: 2px 8px; border-radius: 4px 4px 0 0; border: 1px solid var(--vscode-panel-border); border-bottom: none; font-family: var(--vscode-editor-font-family); display: flex; justify-content: space-between; align-items: center; }
     .code-actions { display: flex; gap: 4px; }
     .code-action-btn { font-size: 10px; padding: 1px 6px; border-radius: 3px; cursor: pointer; border: none; }
-    .code-action-btn.apply { background: #4ade80; color: #000; font-weight: 600; }
-    .code-action-btn.apply:hover { background: #22c55e; }
+    .code-action-btn.apply  { background: #4ade80; color: #000; font-weight: 600; }
+    .code-action-btn.apply:hover  { background: #22c55e; }
     .code-action-btn.insert { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
     .code-action-btn.insert:hover { background: var(--vscode-button-hoverBackground); }
-    .code-action-btn.copy { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
-    .code-action-btn.copy:hover { background: var(--vscode-button-secondaryHoverBackground); }
+    .code-action-btn.copy   { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+    .code-action-btn.copy:hover   { background: var(--vscode-button-secondaryHoverBackground); }
     pre { background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); border-radius: 0 0 4px 4px; padding: 8px; overflow-x: auto; font-family: var(--vscode-editor-font-family); font-size: 11px; line-height: 1.4; }
     .cursor { display: inline-block; width: 2px; height: 13px; background: var(--vscode-button-background); animation: blink 0.8s infinite; vertical-align: middle; margin-left: 2px; border-radius: 1px; }
-    @keyframes blink { 0%,100% { opacity:1 } 50% { opacity:0 } }
+    @keyframes blink { 0%,100%{opacity:1}50%{opacity:0} }
     .route-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; padding: 2px 7px; border-radius: 10px; margin-bottom: 4px; font-weight: 500; }
     .route-badge.research { background: rgba(34,211,238,0.15); color: #22d3ee; }
-    .route-badge.code { background: rgba(74,222,128,0.15); color: #4ade80; }
-    .route-badge.direct { background: rgba(167,139,250,0.15); color: #a78bfa; }
+    .route-badge.code     { background: rgba(74,222,128,0.15); color: #4ade80; }
+    .route-badge.direct   { background: rgba(167,139,250,0.15); color: #a78bfa; }
     .empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--vscode-descriptionForeground); text-align: center; padding: 16px; }
     .empty-state .icon { font-size: 28px; margin-bottom: 4px; }
     .prompts { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 100%; margin-top: 8px; }
@@ -319,13 +282,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 <body>
 <div id="header">
   <div id="status-dot"></div>
-  <span id="header-title">⚡ CodeForge AI</span>
+  <span id="header-title">CodeForge AI</span>
   <button class="icon-btn" id="new-btn" title="New Session">＋</button>
   <button class="icon-btn" id="browser-btn" title="Open in browser">⎋</button>
 </div>
 
+<div id="model-bar">
+  <label>Model:</label>
+  <select id="model-select" title="Select AI model (Ctrl+Shift+M for full picker)">
+    <optgroup label="— OpenRouter (Free) —">
+      ${orOptions}
+    </optgroup>
+    <optgroup label="— Groq (Ultra-fast) —">
+      ${groqOptions}
+    </optgroup>
+  </select>
+</div>
+
 <div id="messages"></div>
-<div class="apply-toast" id="apply-toast">✓ Applied to file!</div>
+<div class="apply-toast" id="apply-toast">✓ Applied!</div>
 
 <div id="input-area">
   <div id="new-session-bar" style="display:none">
@@ -340,38 +315,42 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
 <script nonce="${nonce}">
   const vscode = acquireVsCodeApi();
-  const messagesEl = document.getElementById('messages');
-  const inputEl = document.getElementById('input');
-  const sendBtn = document.getElementById('send-btn');
-  const newBtn = document.getElementById('new-btn');
-  const browserBtn = document.getElementById('browser-btn');
-  const newBar = document.getElementById('new-session-bar');
+  const messagesEl        = document.getElementById('messages');
+  const inputEl           = document.getElementById('input');
+  const sendBtn           = document.getElementById('send-btn');
+  const newBtn            = document.getElementById('new-btn');
+  const browserBtn        = document.getElementById('browser-btn');
+  const newBar            = document.getElementById('new-session-bar');
   const sessionTitleInput = document.getElementById('session-title-input');
-  const createBtn = document.getElementById('create-btn');
-  const applyToast = document.getElementById('apply-toast');
+  const createBtn         = document.getElementById('create-btn');
+  const applyToast        = document.getElementById('apply-toast');
+  const modelSelect       = document.getElementById('model-select');
 
-  let isStreaming = false;
+  let isStreaming    = false;
   let streamingBubble = null;
   let streamingContent = '';
+
+  // Sync model picker → extension settings
+  modelSelect.addEventListener('change', () => {
+    vscode.postMessage({ type: 'changeModel', model: modelSelect.value });
+  });
 
   function escHtml(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
-
   function showToast(msg) {
     applyToast.textContent = msg;
     applyToast.style.display = 'block';
     setTimeout(() => { applyToast.style.display = 'none'; }, 2500);
   }
-
   function renderContent(text) {
     const parts = text.split(/(\\x60\\x60\\x60[\\s\\S]*?\\x60\\x60\\x60)/g);
     return parts.map(part => {
       if (part.startsWith('\\x60\\x60\\x60')) {
         const inner = part.slice(3, -3);
         const nlIdx = inner.indexOf('\\n');
-        const lang = nlIdx === -1 ? '' : inner.slice(0, nlIdx).trim();
-        const code = nlIdx === -1 ? inner : inner.slice(nlIdx + 1);
+        const lang  = nlIdx === -1 ? '' : inner.slice(0, nlIdx).trim();
+        const code  = nlIdx === -1 ? inner : inner.slice(nlIdx + 1);
         const escapedCode = escHtml(code);
         const escapedLang = escHtml(lang || 'code');
         const codeJson = JSON.stringify(code);
@@ -380,9 +359,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <div class="code-lang">
             <span>\${escapedLang}</span>
             <div class="code-actions">
-              <button class="code-action-btn apply" onclick="applyToFile(\${codeJson}, \${langJson})" title="Apply to active file (shows diff)">⚡ Apply</button>
-              <button class="code-action-btn insert" onclick="insertCode(\${codeJson})" title="Insert at cursor">Insert</button>
-              <button class="code-action-btn copy" onclick="copyCode(\${codeJson})" title="Copy to clipboard">Copy</button>
+              <button class="code-action-btn apply"  onclick="applyToFile(\${codeJson},\${langJson})">⚡ Apply</button>
+              <button class="code-action-btn insert" onclick="insertCode(\${codeJson})">Insert</button>
+              <button class="code-action-btn copy"   onclick="copyCode(\${codeJson})">Copy</button>
             </div>
           </div>
           <pre>\${escapedCode}</pre>
@@ -391,24 +370,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       return \`<span style="white-space:pre-wrap">\${escHtml(part)}</span>\`;
     }).join('');
   }
-
-  function copyCode(code) {
-    vscode.postMessage({ type: 'copyCode', code });
-    showToast('✓ Copied!');
-  }
-  function insertCode(code) {
-    vscode.postMessage({ type: 'insertCode', code });
-    showToast('✓ Inserted at cursor!');
-  }
-  function applyToFile(code, lang) {
-    vscode.postMessage({ type: 'applyToFile', code, lang });
-  }
+  function copyCode(code)    { vscode.postMessage({ type:'copyCode', code }); showToast('✓ Copied!'); }
+  function insertCode(code)  { vscode.postMessage({ type:'insertCode', code }); showToast('✓ Inserted!'); }
+  function applyToFile(code, lang) { vscode.postMessage({ type:'applyToFile', code, lang }); }
 
   function addMessage(role, content) {
     const div = document.createElement('div');
     div.className = \`msg \${role}\`;
     if (role !== 'user') {
-      div.innerHTML = \`<div class="agent-label">⚡ codeforge agent</div><div class="bubble">\${renderContent(content)}</div>\`;
+      div.innerHTML = \`<div class="agent-label">codeforge agent</div><div class="bubble">\${renderContent(content)}</div>\`;
     } else {
       div.innerHTML = \`<div class="bubble">\${escHtml(content)}</div>\`;
     }
@@ -419,9 +389,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   function showEmpty() {
     messagesEl.innerHTML = \`<div class="empty-state">
-      <div class="icon">⚡</div>
+      <div class="icon">⬡</div>
       <strong style="font-size:13px">CodeForge AI</strong>
-      <span style="font-size:11px">Select code + right-click to ask AI, or type below</span>
+      <span style="font-size:11px">Select code + right-click, or type below</span>
       <div class="prompts">
         <button class="prompt-btn" onclick="quickPrompt('Explain this file')">Explain this file</button>
         <button class="prompt-btn" onclick="quickPrompt('Find and fix all bugs')">Fix all bugs</button>
@@ -431,10 +401,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     </div>\`;
   }
 
-  function quickPrompt(text) {
-    inputEl.value = text;
-    inputEl.focus();
-  }
+  function quickPrompt(text) { inputEl.value = text; inputEl.focus(); }
 
   function renderMessages(messages) {
     messagesEl.innerHTML = '';
@@ -458,6 +425,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         showEmpty();
         newBar.style.display = 'none';
         break;
+      case 'modelChanged':
+        // Update the inline select when changed via command palette
+        modelSelect.value = msg.modelId;
+        showToast(\`Model: \${msg.label}\`);
+        break;
       case 'userMessage':
         if (!document.querySelector('.msg')) messagesEl.innerHTML = '';
         addMessage('user', msg.content);
@@ -468,7 +440,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         streamingContent = '';
         const wrap = document.createElement('div');
         wrap.className = 'msg streaming';
-        wrap.innerHTML = '<div class="agent-label">⚡ codeforge agent</div><div class="bubble"><span class="cursor"></span></div>';
+        wrap.innerHTML = '<div class="agent-label">codeforge agent</div><div class="bubble"><span class="cursor"></span></div>';
         messagesEl.appendChild(wrap);
         streamingBubble = wrap.querySelector('.bubble');
         messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -534,7 +506,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   createBtn.addEventListener('click', () => {
     const title = sessionTitleInput.value.trim() || 'VS Code Session';
-    vscode.postMessage({ type: 'newSession', title });
+    vscode.postMessage({ type: 'newSession', title, model: modelSelect.value });
     sessionTitleInput.value = '';
     newBar.style.display = 'none';
   });
