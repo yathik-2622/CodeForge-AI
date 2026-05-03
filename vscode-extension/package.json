@@ -1,57 +1,172 @@
 {
   "name": "codeforge-ai",
   "displayName": "CodeForge AI",
-  "description": "Autonomous AI coding agent — chat, refactor, search the web, deploy — all from VS Code.",
+  "description": "Autonomous AI coding agent \u2014 chat, refactor, search the web, deploy \u2014 all from VS Code.",
   "version": "0.1.0",
   "publisher": "codeforge-ai",
   "license": "MIT",
-  "icon": "media/icon.png",
-  "repository": { "type": "git", "url": "https://github.com/yathik-2622/CodeForge-AI" },
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["AI", "Programming Languages", "Other"],
-  "keywords": ["ai", "coding", "agent", "llm", "copilot", "chat", "refactor", "autonomous"],
-  "activationEvents": ["onStartupFinished"],
+  "icon": "media/icon.svg",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yathik-2622/CodeForge-AI"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "coding",
+    "agent",
+    "llm",
+    "copilot",
+    "chat",
+    "refactor",
+    "autonomous"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
-      { "command": "codeforge.openChat",           "title": "CodeForge: Open Chat",           "icon": "$(comment-discussion)" },
-      { "command": "codeforge.askAboutSelection",  "title": "CodeForge: Ask About Selection",  "icon": "$(lightbulb)" },
-      { "command": "codeforge.fixSelection",       "title": "CodeForge: Fix This Code",        "icon": "$(wrench)" },
-      { "command": "codeforge.explainSelection",   "title": "CodeForge: Explain Selection",    "icon": "$(info)" },
-      { "command": "codeforge.generateTests",      "title": "CodeForge: Generate Tests",       "icon": "$(beaker)" },
-      { "command": "codeforge.refactorSelection",  "title": "CodeForge: Refactor Selection",   "icon": "$(symbol-misc)" },
-      { "command": "codeforge.searchWeb",          "title": "CodeForge: Search Web",           "icon": "$(search)" },
-      { "command": "codeforge.newSession",         "title": "CodeForge: New Session",          "icon": "$(add)" },
-      { "command": "codeforge.selectModel",        "title": "CodeForge: Select AI Model",      "icon": "$(symbol-enum)" },
-      { "command": "codeforge.openDashboard",      "title": "CodeForge: Open Dashboard",       "icon": "$(dashboard)" }
+      {
+        "command": "codeforge.openChat",
+        "title": "CodeForge: Open Chat",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "codeforge.askAboutSelection",
+        "title": "CodeForge: Ask About Selection",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "codeforge.fixSelection",
+        "title": "CodeForge: Fix This Code",
+        "icon": "$(wrench)"
+      },
+      {
+        "command": "codeforge.explainSelection",
+        "title": "CodeForge: Explain Selection",
+        "icon": "$(info)"
+      },
+      {
+        "command": "codeforge.generateTests",
+        "title": "CodeForge: Generate Tests",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "codeforge.refactorSelection",
+        "title": "CodeForge: Refactor Selection",
+        "icon": "$(symbol-misc)"
+      },
+      {
+        "command": "codeforge.searchWeb",
+        "title": "CodeForge: Search Web",
+        "icon": "$(search)"
+      },
+      {
+        "command": "codeforge.newSession",
+        "title": "CodeForge: New Session",
+        "icon": "$(add)"
+      },
+      {
+        "command": "codeforge.selectModel",
+        "title": "CodeForge: Select AI Model",
+        "icon": "$(symbol-enum)"
+      },
+      {
+        "command": "codeforge.openDashboard",
+        "title": "CodeForge: Open Dashboard",
+        "icon": "$(dashboard)"
+      }
     ],
     "menus": {
       "editor/context": [
-        { "command": "codeforge.askAboutSelection",  "when": "editorHasSelection", "group": "codeforge@1" },
-        { "command": "codeforge.fixSelection",       "when": "editorHasSelection", "group": "codeforge@2" },
-        { "command": "codeforge.explainSelection",   "when": "editorHasSelection", "group": "codeforge@3" },
-        { "command": "codeforge.generateTests",      "when": "editorHasSelection", "group": "codeforge@4" },
-        { "command": "codeforge.refactorSelection",  "when": "editorHasSelection", "group": "codeforge@5" }
+        {
+          "command": "codeforge.askAboutSelection",
+          "when": "editorHasSelection",
+          "group": "codeforge@1"
+        },
+        {
+          "command": "codeforge.fixSelection",
+          "when": "editorHasSelection",
+          "group": "codeforge@2"
+        },
+        {
+          "command": "codeforge.explainSelection",
+          "when": "editorHasSelection",
+          "group": "codeforge@3"
+        },
+        {
+          "command": "codeforge.generateTests",
+          "when": "editorHasSelection",
+          "group": "codeforge@4"
+        },
+        {
+          "command": "codeforge.refactorSelection",
+          "when": "editorHasSelection",
+          "group": "codeforge@5"
+        }
       ],
       "editor/title": [
-        { "command": "codeforge.openChat", "group": "navigation" }
+        {
+          "command": "codeforge.openChat",
+          "group": "navigation"
+        }
       ]
     },
     "keybindings": [
-      { "command": "codeforge.openChat",           "key": "ctrl+shift+a",  "mac": "cmd+shift+a" },
-      { "command": "codeforge.selectModel",        "key": "ctrl+shift+m",  "mac": "cmd+shift+m" },
-      { "command": "codeforge.askAboutSelection",  "key": "ctrl+shift+q",  "mac": "cmd+shift+q", "when": "editorHasSelection" },
-      { "command": "codeforge.fixSelection",       "key": "ctrl+shift+f",  "mac": "cmd+shift+f", "when": "editorHasSelection" }
+      {
+        "command": "codeforge.openChat",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a"
+      },
+      {
+        "command": "codeforge.selectModel",
+        "key": "ctrl+shift+m",
+        "mac": "cmd+shift+m"
+      },
+      {
+        "command": "codeforge.askAboutSelection",
+        "key": "ctrl+shift+q",
+        "mac": "cmd+shift+q",
+        "when": "editorHasSelection"
+      },
+      {
+        "command": "codeforge.fixSelection",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f",
+        "when": "editorHasSelection"
+      }
     ],
     "viewsContainers": {
       "activitybar": [
-        { "id": "codeforge", "title": "CodeForge AI", "icon": "media/icon.svg" }
+        {
+          "id": "codeforge",
+          "title": "CodeForge AI",
+          "icon": "media/icon.svg"
+        }
       ]
     },
     "views": {
       "codeforge": [
-        { "type": "webview", "id": "codeforge.chatView",     "name": "Chat",     "icon": "$(comment-discussion)" },
-        { "type": "webview", "id": "codeforge.sessionsView", "name": "Sessions", "icon": "$(list-unordered)"     }
+        {
+          "type": "webview",
+          "id": "codeforge.chatView",
+          "name": "Chat",
+          "icon": "$(comment-discussion)"
+        },
+        {
+          "type": "webview",
+          "id": "codeforge.sessionsView",
+          "name": "Sessions",
+          "icon": "$(list-unordered)"
+        }
       ]
     },
     "configuration": {
@@ -86,24 +201,24 @@
             "groq/deepseek-r1-distill-llama-70b"
           ],
           "enumDescriptions": [
-            "Mistral 7B Instruct — Fast, great for code (OpenRouter Free)",
-            "Llama 3.1 8B Instruct — 128k context (OpenRouter Free)",
-            "Llama 3 8B — Open source, well-rounded (OpenRouter Free)",
-            "Phi-3 Mini — 128k context window (OpenRouter Free)",
-            "Gemma 3 12B — Google's latest (OpenRouter Free)",
-            "Gemma 2 9B — Google (OpenRouter Free)",
-            "DeepSeek R1 — Reasoning model, 163k ctx (OpenRouter Free)",
-            "DeepSeek R1 Distill 70B — Reasoning (OpenRouter Free)",
-            "Qwen 2.5 7B — Alibaba, 128k ctx (OpenRouter Free)",
-            "Mistral Nemo 12B — 128k ctx (OpenRouter Free)",
-            "OpenChat 7B — Chat optimized (OpenRouter Free)",
-            "Llama 3.3 70B Versatile — Ultra-fast via Groq (requires GROQ_API_KEY)",
-            "Llama 3.1 8B Instant — Fastest via Groq (requires GROQ_API_KEY)",
-            "Llama 3 70B — Groq (requires GROQ_API_KEY)",
-            "Llama 3 8B — Groq (requires GROQ_API_KEY)",
-            "Mixtral 8x7B 32k — MoE via Groq (requires GROQ_API_KEY)",
-            "Gemma 2 9B — Groq (requires GROQ_API_KEY)",
-            "DeepSeek R1 Distill 70B — Reasoning via Groq (requires GROQ_API_KEY)"
+            "Mistral 7B Instruct \u2014 Fast, great for code (OpenRouter Free)",
+            "Llama 3.1 8B Instruct \u2014 128k context (OpenRouter Free)",
+            "Llama 3 8B \u2014 Open source, well-rounded (OpenRouter Free)",
+            "Phi-3 Mini \u2014 128k context window (OpenRouter Free)",
+            "Gemma 3 12B \u2014 Google's latest (OpenRouter Free)",
+            "Gemma 2 9B \u2014 Google (OpenRouter Free)",
+            "DeepSeek R1 \u2014 Reasoning model, 163k ctx (OpenRouter Free)",
+            "DeepSeek R1 Distill 70B \u2014 Reasoning (OpenRouter Free)",
+            "Qwen 2.5 7B \u2014 Alibaba, 128k ctx (OpenRouter Free)",
+            "Mistral Nemo 12B \u2014 128k ctx (OpenRouter Free)",
+            "OpenChat 7B \u2014 Chat optimized (OpenRouter Free)",
+            "Llama 3.3 70B Versatile \u2014 Ultra-fast via Groq (requires GROQ_API_KEY)",
+            "Llama 3.1 8B Instant \u2014 Fastest via Groq (requires GROQ_API_KEY)",
+            "Llama 3 70B \u2014 Groq (requires GROQ_API_KEY)",
+            "Llama 3 8B \u2014 Groq (requires GROQ_API_KEY)",
+            "Mixtral 8x7B 32k \u2014 MoE via Groq (requires GROQ_API_KEY)",
+            "Gemma 2 9B \u2014 Groq (requires GROQ_API_KEY)",
+            "DeepSeek R1 Distill 70B \u2014 Reasoning via Groq (requires GROQ_API_KEY)"
           ],
           "description": "AI model to use. OpenRouter models need OPENROUTER_API_KEY. Groq models need GROQ_API_KEY."
         },
