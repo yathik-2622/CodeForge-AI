@@ -25,6 +25,12 @@ export function loadConfig(): Config {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       saved = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8")) as Partial<Config>;
+      // Migrate known-dead models to working default
+      const DEAD_MODELS = ["mistralai/mistral-7b-instruct:free", "mistralai/mistral-7b-instruct", "mistralai/mistral-7b-instruct-free"];
+      if (saved.model && DEAD_MODELS.includes(saved.model)) {
+        saved.model = "google/gemma-2-9b-it:free";
+        fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...DEFAULTS, ...saved }, null, 2));
+      }
     }
   } catch {}
 
