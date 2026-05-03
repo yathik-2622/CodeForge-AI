@@ -4,7 +4,8 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
 const port = Number(process.env.PORT) || 5173;
-const apiTarget = process.env.VITE_API_URL || "http://localhost:8080";
+// Node API runs on port 3000 — set VITE_API_URL in frontend/.env to override
+const apiTarget = process.env.VITE_API_URL || "http://localhost:3000";
 
 export default defineConfig({
   base: "/",
@@ -13,10 +14,7 @@ export default defineConfig({
     alias: { "@": path.resolve(__dirname, "src") },
     dedupe: ["react", "react-dom"],
   },
-  build: {
-    outDir: "dist",
-    emptyOutDir: true,
-  },
+  build: { outDir: "dist", emptyOutDir: true },
   server: {
     port,
     host: "0.0.0.0",
