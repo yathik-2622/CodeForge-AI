@@ -1,32 +1,28 @@
 services:
-  # ── Node.js API Server ────────────────────────────────────────────────────
   - type: web
-    name: codeforge-api
+    name: codeforge-node-api
     runtime: node
-    plan: free
-    buildCommand: npm install -g pnpm && pnpm install --frozen-lockfile && pnpm --filter @workspace/api-client-react run build && pnpm --filter @workspace/api-server run build
-    startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
-    healthCheckPath: /api/health
+    rootDir: node_api
+    buildCommand: npm install && npm run build
+    startCommand: node --enable-source-maps dist/index.mjs
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 8080
       - key: MONGODB_URL
         sync: false
       - key: MONGODB_DB
         value: CodeForge_AI
       - key: OPENROUTER_API_KEY
         sync: false
-      - key: QDRANT_URL
-        sync: false
-      - key: QDRANT_API_KEY
-        sync: false
-      - key: TAVILY_API_KEY
-        sync: false
       - key: SESSION_SECRET
         sync: false
       - key: GITHUB_CLIENT_ID
         sync: false
       - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: TAVILY_API_KEY
         sync: false
       - key: TWILIO_ACCOUNT_SID
         sync: false
@@ -36,17 +32,20 @@ services:
         sync: false
       - key: ALLOWED_ORIGINS
         sync: false
+      - key: APP_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
 
-  # ── Python FastAPI Backend ─────────────────────────────────────────────────
   - type: web
-    name: codeforge-backend
+    name: codeforge-python-api
     runtime: python
-    plan: free
+    rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-    rootDir: backend
-    healthCheckPath: /api/health
     envVars:
+      - key: PORT
+        value: 9000
       - key: MONGODB_URL
         sync: false
       - key: MONGODB_DB
@@ -57,19 +56,17 @@ services:
         sync: false
       - key: QDRANT_API_KEY
         sync: false
-      - key: TAVILY_API_KEY
-        sync: false
-      - key: SESSION_SECRET
-        sync: false
       - key: GITHUB_CLIENT_ID
         sync: false
       - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: TAVILY_API_KEY
         sync: false
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
         sync: false
       - key: TWILIO_WHATSAPP_FROM
-        sync: false
-      - key: FRONTEND_URL
         sync: false

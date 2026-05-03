@@ -1,32 +1,36 @@
-# Secrets — never commit these
-backend/.env
-.env
-*.env
+# Node
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+.cache/
+*.tsbuildinfo
 
 # Python
 __pycache__/
-*.pyc
-*.pyo
-.pythonlibs/
+*.py[cod]
 *.egg-info/
-dist/
-build/
 .venv/
 venv/
+.mypy_cache/
 
-# Node
-node_modules/
-.pnpm-store/
+# Env / secrets
+.env
+.env.local
+.env.*.local
+*.env
 
-# Build outputs
-artifacts/*/dist/
-artifacts/*/.vite/
-*.vsix
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
 
-# Misc
-*.log
+# OS
 .DS_Store
 Thumbs.db
-/tmp/
-coverage/
-.cache/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
