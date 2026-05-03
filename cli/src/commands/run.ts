@@ -1,15 +1,15 @@
 /**
  * CodeForge AI — Run Command
- * Execute a shell command. If it fails, AI automatically diagnoses the error
- * and suggests (or applies) a fix — like Claude Code's autonomous shell mode.
+ * Execute a shell command. If it fails, AI diagnoses the error
+ * and auto-fixes it, then retries — like Claude Code's autonomous loop.
  *
  * Usage:
- *   cf run "npm test"
- *   cf run "python main.py" --fix            auto-fix files AI identifies
- *   cf run "cargo build"    --watch          re-run after each AI fix attempt
- *   cf run "pytest tests/"  --max-attempts 3 retry up to 3 times
+ *   cf run "npm test"                        run once, prompt on failure
+ *   cf run "npm test" --fix                  auto-apply fixes, prompt to retry
+ *   cf run "npm test" --watch                fully autonomous loop until pass
+ *   cf run "cargo build" --max-attempts 5    retry up to 5 times
  */
-import { execSync, spawnSync } from "child_process";
+import { spawnSync } from "child_process";
 import chalk from "chalk";
 import path from "path";
 import fs from "fs";
@@ -26,62 +26,77 @@ interface RunOptions {
 
 export async function runCommand(shellCmd: string, options: RunOptions) {
   const maxAttempts = parseInt(options.maxAttempts ?? "3", 10);
-  let attempt = 0;
+  const isWatch     = !!options.watch;    // fully autonomous: no prompts, auto-apply + auto-retry
+  const autoFix     = !!options.fix || isWatch;
 
   console.log();
   console.log(c.brand("  ⚡ CodeForge AI Run") + c.dim(` — ${shellCmd}`));
+  if (isWatch) {
+    console.log(c.dim("  Watch mode: AI will auto-fix and retry until the command passes."));
+  }
   console.log(c.dim("  " + "─".repeat(54)));
   console.log();
 
-  while (attempt <= maxAttempts) {
+  for (let attempt = 0; attempt <= maxAttempts; attempt++) {
+    // ── Run the command ───────────────────────────────────────────────────────
+    const label = attempt === 0 ? "Running" : `Retry ${attempt}/${maxAttempts}`;
+    process.stdout.write(c.dim(`  [${label}] ${shellCmd}\n`));
+
     const result = execShell(shellCmd);
 
     if (result.exitCode === 0) {
-      // Success
-      if (result.stdout) process.stdout.write(result.stdout);
+      // ✅ Success
+      if (result.stdout.trim()) {
+        result.stdout.trim().split("\n").forEach((l) => console.log(c.dim("  " + l)));
+      }
       console.log();
-      console.log(c.success(`  ✓ Command succeeded`));
-      if (attempt > 0) console.log(c.success(`  Fixed after ${attempt} attempt${attempt > 1 ? "s" : ""}!`));
+      if (attempt === 0) {
+        console.log(c.success("  ✓ Command passed"));
+      } else {
+        console.log(c.success(`  ✓ Command passed after ${attempt} AI fix attempt${attempt > 1 ? "s" : ""}!`));
+      }
       console.log();
       return;
     }
 
-    // Failed — show output
-    console.log(chalk.red(`  ✗ Command failed (exit code ${result.exitCode})`));
+    // ✗ Failed — show tail of output
+    console.log(chalk.red(`  ✗ Failed (exit ${result.exitCode})`));
     console.log();
-    if (result.stdout) {
-      console.log(c.muted("  STDOUT:"));
-      result.stdout.split("\n").slice(-20).forEach((l) => console.log(c.dim("  " + l)));
-    }
-    if (result.stderr) {
-      console.log(chalk.red("  STDERR:"));
-      result.stderr.split("\n").slice(-30).forEach((l) => console.log(chalk.red("  " + l)));
+    const errorLines = [...result.stdout.split("\n"), ...result.stderr.split("\n")]
+      .filter((l) => l.trim())
+      .slice(-25);
+    for (const line of errorLines) {
+      const isErr = /error|Error|ERROR|fail|FAIL|warn|Warn/i.test(line);
+      console.log(isErr ? chalk.red("  " + line) : c.dim("  " + line));
     }
     console.log();
 
-    if (!options.fix && attempt === 0) {
-      // Ask if they want AI diagnosis
+    if (attempt >= maxAttempts) {
+      console.log(c.warn(`  Max attempts (${maxAttempts}) reached. Could not auto-fix.`));
+      console.log(c.dim("  Tip: increase with --max-attempts 5"));
+      console.log();
+      break;
+    }
+
+    // ── Ask to diagnose (unless watch/fix mode) ───────────────────────────────
+    if (!autoFix) {
       const want = await askQuestion(c.cyan("  Ask AI to diagnose and fix this? (Y/n) › "));
       if (want.toLowerCase() === "n") return;
     }
 
-    attempt++;
-    if (attempt > maxAttempts) {
-      console.log(c.warn(`  Reached max attempts (${maxAttempts}). Could not auto-fix.`));
-      break;
-    }
+    console.log();
+    console.log(c.dim(`  AI diagnosing error (attempt ${attempt + 1}/${maxAttempts})...`));
+    console.log();
 
-    console.log(c.dim(`  AI diagnosing error (attempt ${attempt}/${maxAttempts})...\n`));
-
-    // Build error context — read files mentioned in the error
-    const errorText  = (result.stderr || result.stdout || "").slice(0, 4000);
-    const fileRefs   = extractFilePaths(errorText, process.cwd());
-    const fileCtx    = buildFileContext(fileRefs);
+    // ── Build error context ────────────────────────────────────────────────────
+    const errorText = (result.stderr || result.stdout || "").slice(0, 5000);
+    const fileRefs  = extractFilePaths(errorText, process.cwd());
+    const fileCtx   = buildFileContext(fileRefs);
 
     const messages: Message[] = [
       {
         role: "user",
-        content: `I ran this command and it failed. Please analyze the error and fix it.
+        content: `I ran this command and it failed. Analyze the error and provide exact file fixes.
 
 ## Command
 \`\`\`
@@ -93,132 +108,130 @@ ${shellCmd}
 ${errorText}
 \`\`\`
 
-${fileCtx ? `## Relevant Files\n${fileCtx}` : ""}
+${fileCtx ? `## Relevant Source Files\n${fileCtx}` : ""}
 
 ## Instructions
-1. Identify the exact cause of the error.
-2. For each file that needs to be changed, provide the fix in this EXACT format:
+1. Identify the exact root cause.
+2. For EACH file that needs changing, use this format:
 
-<fix file="path/to/file.ext">
+<fix file="relative/path/to/file.ext">
 \`\`\`language
-complete fixed file content here
+complete corrected file content
 \`\`\`
 </fix>
 
-3. After all fixes, briefly explain what was wrong.
-If no file changes are needed (e.g. a missing package), give the exact command to run instead.`,
+3. After all <fix> blocks, write a one-line summary of what was wrong.
+
+If no files need changing (e.g. missing package), state the exact command to run.`,
       },
     ];
 
-    console.log(chalk.hex("#818cf8")("  CF › ") + c.dim("Diagnosing...\n  "));
-
+    // ── Stream AI response ────────────────────────────────────────────────────
+    process.stdout.write(chalk.hex("#818cf8")("  CF › "));
     let diagnosis = "";
     await new Promise<void>((res) => {
-      streamChat(messages, (tok) => {
-        process.stdout.write(tok);
-        diagnosis += tok;
-      }, () => { console.log("\n"); res(); });
+      streamChat(
+        messages,
+        (tok) => { process.stdout.write(tok); diagnosis += tok; },
+        () => { console.log("\n"); res(); },
+      );
     });
 
-    // Extract and apply file fixes
+    // ── Parse + apply file fixes ──────────────────────────────────────────────
     const fixes = extractFixes(diagnosis);
+
     if (fixes.length === 0) {
-      console.log(c.dim("  No file fixes suggested. Review the AI response above."));
-      if (!options.watch) break;
-    } else {
-      console.log(c.bold(`\n  AI suggested ${fixes.length} file fix${fixes.length > 1 ? "es" : ""}:`));
-      for (const fix of fixes) {
-        console.log(`    ${c.cyan(fix.filePath)}`);
-      }
-      console.log();
-
-      let applyAll = options.fix;
-      if (!applyAll) {
-        const ans = await askQuestion(c.cyan("  Apply all fixes and retry? (Y/n) › "));
-        applyAll  = ans.toLowerCase() !== "n";
-      }
-
-      if (!applyAll) break;
-
-      for (const fix of fixes) {
-        try {
-          const dir = path.dirname(fix.filePath);
-          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-          writeFile(fix.filePath, fix.content);
-          console.log(c.success(`  ✓ Applied fix to ${fix.filePath}`));
-        } catch (e: any) {
-          console.log(c.error(`  ✗ Could not write ${fix.filePath}: ${e.message}`));
-        }
-      }
-
-      console.log();
-      console.log(c.dim(`  Retrying: ${shellCmd}`));
-      console.log(c.dim("  " + "─".repeat(54)));
-      console.log();
+      console.log(c.dim("  No file fixes found in AI response."));
+      if (!isWatch) break;
+      // In watch mode keep going — maybe next attempt will see different error
+      continue;
     }
+
+    console.log(c.bold(`  ${fixes.length} fix${fixes.length > 1 ? "es" : ""} suggested:`));
+    for (const fix of fixes) {
+      console.log(`    ${c.cyan(fix.filePath)}`);
+    }
+    console.log();
+
+    let doApply = autoFix;
+    if (!doApply) {
+      const ans = await askQuestion(c.cyan("  Apply fixes and retry? (Y/n) › "));
+      doApply   = ans.toLowerCase() !== "n";
+    }
+
+    if (!doApply) break;
+
+    let applied = 0;
+    for (const fix of fixes) {
+      try {
+        const dir = path.dirname(fix.filePath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        writeFile(fix.filePath, fix.content);
+        console.log(c.success(`  ✓ Applied → ${fix.filePath}`));
+        applied++;
+      } catch (e: any) {
+        console.log(c.error(`  ✗ Could not write ${fix.filePath}: ${e.message}`));
+      }
+    }
+
+    if (applied === 0) {
+      console.log(c.warn("  No files were written. Breaking loop."));
+      break;
+    }
+
+    console.log();
+    console.log(c.dim("  " + "─".repeat(54)));
+    console.log();
+    // Loop continues — re-runs the command at top of for loop
   }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function execShell(cmd: string): { exitCode: number; stdout: string; stderr: string } {
-  const result = spawnSync(cmd, { shell: true, cwd: process.cwd(), encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
-  return {
-    exitCode: result.status ?? 1,
-    stdout:   result.stdout ?? "",
-    stderr:   result.stderr ?? "",
-  };
+  const r = spawnSync(cmd, {
+    shell: true, cwd: process.cwd(), encoding: "utf-8", maxBuffer: 10 * 1024 * 1024,
+  });
+  return { exitCode: r.status ?? 1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }
 
-/** Extract file paths mentioned in the error output */
 function extractFilePaths(errorText: string, cwd: string): string[] {
   const patterns = [
-    /(?:error|warning|at)\s+([a-zA-Z0-9_/\\.-]+\.[a-z]{1,5})(?::\d+)?/gi,
+    /(?:error|warning|at)\s+([a-zA-Z0-9_./@\\-]+\.[a-z]{1,5})(?::\d+)?/gi,
     /File\s+"([^"]+)"/g,
-    /([a-zA-Z0-9_/\\.-]+\.[ts|js|py|go|rs|java|cpp|c|rb]+):\d+/g,
+    /([a-zA-Z0-9_./@\\-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|cpp|c|rb|php)):\d+/g,
   ];
   const found = new Set<string>();
   for (const re of patterns) {
-    let m;
+    let m: RegExpExecArray | null;
     while ((m = re.exec(errorText)) !== null) {
-      const candidate = m[1];
-      const abs = path.isAbsolute(candidate) ? candidate : path.join(cwd, candidate);
+      const abs = path.isAbsolute(m[1]) ? m[1] : path.join(cwd, m[1]);
       if (fileExists(abs) && !abs.includes("node_modules")) found.add(abs);
     }
   }
   return Array.from(found).slice(0, 6);
 }
 
-/** Build a context string with contents of referenced files */
 function buildFileContext(filePaths: string[]): string {
-  const parts: string[] = [];
-  for (const fp of filePaths) {
+  return filePaths.map((fp) => {
     try {
-      const lang    = detectLanguage(fp);
-      const content = readFile(fp).slice(0, 2000);
-      const rel     = path.relative(process.cwd(), fp);
-      parts.push(`### ${rel}\n\`\`\`${lang}\n${content}\n\`\`\``);
-    } catch {}
-  }
-  return parts.join("\n\n");
+      const lang = detectLanguage(fp);
+      const body = readFile(fp).slice(0, 2000);
+      const rel  = path.relative(process.cwd(), fp);
+      return `### ${rel}\n\`\`\`${lang}\n${body}\n\`\`\``;
+    } catch { return ""; }
+  }).filter(Boolean).join("\n\n");
 }
 
-/** Parse <fix file="...">```lang\ncontent\n```</fix> blocks from AI response */
 function extractFixes(text: string): Array<{ filePath: string; content: string }> {
   const fixes: Array<{ filePath: string; content: string }> = [];
-  const fixRe = /<fix\s+file="([^"]+)">([\s\S]*?)<\/fix>/gi;
+  const re = /<fix\s+file="([^"]+)">([\s\S]*?)<\/fix>/gi;
   let m: RegExpExecArray | null;
-
-  while ((m = fixRe.exec(text)) !== null) {
-    const filePath = m[1].trim();
-    const inner    = m[2].trim();
-    // Strip code fences if present
-    const codeMatch = inner.match(/```[\w]*\n?([\s\S]*?)```/);
-    const content   = codeMatch ? codeMatch[1] : inner;
+  while ((m = re.exec(text)) !== null) {
+    const filePath    = m[1].trim();
+    const codeMatch   = m[2].match(/```[\w]*\n?([\s\S]*?)```/);
+    const content     = codeMatch ? codeMatch[1] : m[2].trim();
     if (filePath && content) fixes.push({ filePath, content });
   }
   return fixes;
 }
-
-/** Tiny helper reused from display.ts to avoid circular imports */
-function c_muted(s: string) { return chalk.hex("#64748b")(s); }
