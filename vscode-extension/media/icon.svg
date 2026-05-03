@@ -1,81 +1,96 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#0d1117"/>
-      <stop offset="100%" stop-color="#0f1629"/>
+    <!-- Deep space background -->
+    <radialGradient id="bg" cx="50%" cy="50%" r="70%">
+      <stop offset="0%"   stop-color="#0c1a3a"/>
+      <stop offset="100%" stop-color="#04080f"/>
+    </radialGradient>
+
+    <!-- Convergence glow at center -->
+    <radialGradient id="nexus" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="30%"  stop-color="#7dd3fc" stop-opacity="0.9"/>
+      <stop offset="80%"  stop-color="#3b82f6" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Stream gradients — each fades from colour to transparent at tip -->
+    <linearGradient id="s1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.9"/>
     </linearGradient>
-    <linearGradient id="blue" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#38bdf8"/>
-      <stop offset="100%" stop-color="#818cf8"/>
+    <linearGradient id="s2" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#818cf8" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#818cf8" stop-opacity="0.9"/>
     </linearGradient>
-    <linearGradient id="purple" x1="0%" y1="100%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#6366f1"/>
-      <stop offset="100%" stop-color="#06b6d4"/>
+    <linearGradient id="s3" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#34d399" stop-opacity="0.7"/>
     </linearGradient>
-    <linearGradient id="bolt" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#60a5fa"/>
-      <stop offset="100%" stop-color="#a78bfa"/>
+    <linearGradient id="s4" x1="100%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#a78bfa" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#a78bfa" stop-opacity="0.8"/>
     </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="2" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+
+    <filter id="blur-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-    <filter id="softglow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    <filter id="strong-glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="5"/>
     </filter>
     <clipPath id="clip">
       <rect width="100" height="100" rx="22"/>
     </clipPath>
   </defs>
 
-  <!-- Background -->
   <rect width="100" height="100" rx="22" fill="url(#bg)"/>
 
-  <!-- Subtle grid lines (very faint) -->
-  <line x1="0" y1="33" x2="100" y2="33" stroke="#1e293b" stroke-width="0.5" opacity="0.5"/>
-  <line x1="0" y1="67" x2="100" y2="67" stroke="#1e293b" stroke-width="0.5" opacity="0.5"/>
-  <line x1="33" y1="0" x2="33" y2="100" stroke="#1e293b" stroke-width="0.5" opacity="0.5"/>
-  <line x1="67" y1="0" x2="67" y2="100" stroke="#1e293b" stroke-width="0.5" opacity="0.5"/>
+  <g clip-path="url(#clip)">
+    <!-- ── 8 converging angular streams ───────────────────────────────────── -->
+    <!-- Each stream is a thin triangle/wedge pointing at (50,50) -->
 
-  <!-- Outer border glow -->
-  <rect width="100" height="100" rx="22" stroke="url(#blue)" stroke-width="1.5" fill="none" opacity="0.5"/>
+    <!-- Top-left  → cyan -->
+    <polygon points="4,4 28,10 10,28"    fill="url(#s1)" opacity="0.85"/>
+    <!-- Bottom-left → emerald -->
+    <polygon points="4,96 28,90 10,72"   fill="url(#s3)" opacity="0.75"/>
+    <!-- Top-right  → violet -->
+    <polygon points="96,4 72,10 90,28"   fill="url(#s2)" opacity="0.85"/>
+    <!-- Bottom-right → purple -->
+    <polygon points="96,96 72,90 90,72"  fill="url(#s4)" opacity="0.8"/>
 
-  <!-- Circuit corner — top-left -->
-  <polyline points="8,20 8,8 20,8" stroke="#38bdf8" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/>
-  <circle cx="8" cy="8" r="1.8" fill="#38bdf8" opacity="0.9"/>
+    <!-- Mid-left  → cyan thin -->
+    <polygon points="4,42 20,46 20,54 4,58" fill="url(#s1)" opacity="0.5"/>
+    <!-- Mid-right → violet thin -->
+    <polygon points="96,42 80,46 80,54 96,58" fill="url(#s2)" opacity="0.5"/>
+    <!-- Mid-top   → teal thin -->
+    <polygon points="42,4 46,20 54,20 58,4" fill="url(#s3)" opacity="0.45"/>
+    <!-- Mid-bottom → purple thin -->
+    <polygon points="42,96 46,80 54,80 58,96" fill="url(#s4)" opacity="0.45"/>
 
-  <!-- Circuit corner — top-right -->
-  <polyline points="92,20 92,8 80,8" stroke="#38bdf8" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/>
-  <circle cx="92" cy="8" r="1.8" fill="#38bdf8" opacity="0.9"/>
+    <!-- ── Glow bloom behind nexus ────────────────────────────────────────── -->
+    <circle cx="50" cy="50" r="22" fill="#3b82f6" opacity="0.12" filter="url(#strong-glow)"/>
+    <circle cx="50" cy="50" r="14" fill="#60a5fa" opacity="0.18" filter="url(#strong-glow)"/>
 
-  <!-- Circuit corner — bottom-left -->
-  <polyline points="8,80 8,92 20,92" stroke="#818cf8" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/>
-  <circle cx="8" cy="92" r="1.8" fill="#818cf8" opacity="0.9"/>
+    <!-- ── Central nexus — glowing core ──────────────────────────────────── -->
+    <circle cx="50" cy="50" r="16" fill="url(#nexus)" filter="url(#blur-glow)"/>
 
-  <!-- Circuit corner — bottom-right -->
-  <polyline points="92,80 92,92 80,92" stroke="#818cf8" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.7"/>
-  <circle cx="92" cy="92" r="1.8" fill="#818cf8" opacity="0.9"/>
+    <!-- ── Inner geometric mark — angular hexagon ────────────────────────── -->
+    <path d="M50 37 L60 43 L60 57 L50 63 L40 57 L40 43 Z"
+      fill="none" stroke="#bfdbfe" stroke-width="1.5" opacity="0.9"/>
 
-  <!-- Left bracket < -->
-  <polyline points="30,32 18,50 30,68"
-    stroke="url(#blue)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none" filter="url(#glow)"/>
+    <!-- ── Lightning bolt at absolute centre ─────────────────────────────── -->
+    <path d="M52 40 L46 51 L50 51 L48 60 L54 49 L50 49 Z"
+      fill="#ffffff" opacity="0.95"/>
 
-  <!-- Right bracket > -->
-  <polyline points="70,32 82,50 70,68"
-    stroke="url(#purple)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none" filter="url(#glow)"/>
-
-  <!-- Lightning bolt (centre) — CodeForge "power" symbol -->
-  <path d="M 56 24 L 42 52 L 51 52 L 44 76 L 58 48 L 49 48 Z"
-    fill="url(#bolt)" filter="url(#softglow)"/>
-
-  <!-- Tiny node dots on bracket tips -->
-  <circle cx="30" cy="32" r="2" fill="#38bdf8" opacity="0.8"/>
-  <circle cx="30" cy="68" r="2" fill="#38bdf8" opacity="0.8"/>
-  <circle cx="70" cy="32" r="2" fill="#818cf8" opacity="0.8"/>
-  <circle cx="70" cy="68" r="2" fill="#818cf8" opacity="0.8"/>
-
-  <!-- Scan line (horizontal, subtle) -->
-  <line x1="12" y1="50" x2="18" y2="50" stroke="#38bdf8" stroke-width="1" opacity="0.6"/>
-  <line x1="82" y1="50" x2="88" y2="50" stroke="#818cf8" stroke-width="1" opacity="0.6"/>
+    <!-- ── Tiny node dots where streams end ──────────────────────────────── -->
+    <circle cx="16" cy="16" r="1.8" fill="#06b6d4" opacity="0.9"/>
+    <circle cx="84" cy="16" r="1.8" fill="#818cf8" opacity="0.9"/>
+    <circle cx="16" cy="84" r="1.8" fill="#34d399" opacity="0.8"/>
+    <circle cx="84" cy="84" r="1.8" fill="#a78bfa" opacity="0.8"/>
+    <circle cx="10" cy="50" r="1.4" fill="#06b6d4" opacity="0.7"/>
+    <circle cx="90" cy="50" r="1.4" fill="#818cf8" opacity="0.7"/>
+    <circle cx="50" cy="10" r="1.4" fill="#34d399" opacity="0.6"/>
+    <circle cx="50" cy="90" r="1.4" fill="#a78bfa" opacity="0.6"/>
+  </g>
 </svg>
