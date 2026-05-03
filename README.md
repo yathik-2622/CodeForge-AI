@@ -1,194 +1,280 @@
 <div align="center">
   <img src="frontend/public/favicon.svg" width="80" height="80" alt="CodeForge AI" />
   <h1>CodeForge AI</h1>
-  <p><strong>Autonomous, multi-agent coding platform — self-hostable, open-source</strong></p>
+  <p><strong>Autonomous, multi-agent coding platform — self-hostable, open-source, 23 free AI models</strong></p>
   <p>
     <img src="https://img.shields.io/badge/React-19-61dafb?logo=react" />
     <img src="https://img.shields.io/badge/Node.js-20-339933?logo=nodedotjs" />
     <img src="https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi" />
     <img src="https://img.shields.io/badge/MongoDB-Atlas-47A248?logo=mongodb" />
+    <img src="https://img.shields.io/badge/OpenRouter-Free-6366f1" />
+    <img src="https://img.shields.io/badge/Groq-Ultra--fast-f97316" />
     <img src="https://img.shields.io/badge/License-MIT-blue" />
   </p>
 </div>
 
 ---
 
-## Overview
+## What Is CodeForge AI?
 
-CodeForge AI is a **production-grade, multi-agent coding assistant** that connects to your GitHub repositories, analyzes code, streams AI responses in real time, and ships features autonomously.  Deploy it entirely yourself — Vercel (frontend) + Render (backend) — with no vendor lock-in.
+CodeForge AI is a **production-grade, multi-agent coding assistant** that you run yourself. Connect it to your GitHub repos, chat with AI about your codebase, auto-fix bugs, search the web, and deploy — all with **23 completely free AI models** (no paid API required).
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      CodeForge AI Stack                         │
-│                                                                 │
-│  ┌──────────────┐   ┌──────────────────┐   ┌───────────────┐  │
-│  │   Frontend   │   │   Node.js API    │   │  Python API   │  │
-│  │  React + TS  │◄──│  Express + WS    │   │  FastAPI +    │  │
-│  │   (Vercel)   │   │  (Render)        │   │  LangGraph    │  │
-│  └──────┬───────┘   └────────┬─────────┘   └──────┬────────┘  │
-│         │                   │                      │           │
-│         └───────────────────┼──────────────────────┘           │
-│                             ▼                                   │
-│  ┌───────────────┐  ┌───────────────┐  ┌──────────────────┐   │
-│  │  MongoDB Atlas│  │   Qdrant DB   │  │    OpenRouter    │   │
-│  │  (Documents)  │  │ (Vector Store)│  │ (AI Models: Free)│   │
-│  └───────────────┘  └───────────────┘  └──────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-```
+| Component | Tech | Purpose |
+|-----------|------|---------|
+| **Web App** | React 19 + Vite + Tailwind | Dashboard, chat UI, model selector |
+| **Node API** | Express + Fastify streaming | Real-time AI streaming, WebSocket, GitHub OAuth |
+| **Python Backend** | FastAPI + LangGraph | AI agents, MongoDB, WhatsApp, web search |
+| **CLI** (`cf`) | Node.js | Full coding agent in your terminal |
+| **VS Code Extension** | VS Code API | AI directly inside your editor |
+| **WhatsApp Bot** | Twilio | Chat with AI on WhatsApp |
 
-## Features
+---
 
-| Feature | Description |
-|---------|-------------|
-| **Multi-Agent Orchestration** | Planner, Coder, Researcher, Debug, Security & Deployment agents |
-| **GitHub Integration** | OAuth login, repo scanning, file tree analysis, AI-powered repo analysis |
-| **Real-time AI Streaming** | SSE + WebSocket — every token streams live; collaborators see it too |
-| **Live Collaboration** | Share any chat session — multiple users, one live stream |
-| **Web Search** | Agents use Tavily to search docs, CVEs, and best practices |
-| **Security Scanner** | Detects secrets, injections, and vulnerable packages |
-| **WhatsApp Bot** | Chat with CodeForge AI via WhatsApp (Twilio) |
-| **VS Code Extension** | Full Cursor-like experience: diff view, one-click apply, inline chat |
-| **Repository Analyzer** | AI-powered architecture analysis with improvement suggestions |
-| **Deployments Dashboard** | Track deploys across AWS, GCP, Azure, Docker, Kubernetes |
+## 23 Free AI Models
 
-## Project Structure
+### OpenRouter (free, no credit card)
+| Model | Context | Best For |
+|-------|---------|---------|
+| Mistral 7B Instruct | 32k | Fast general coding |
+| Llama 3.1 8B Instruct | 128k | Long codebases |
+| Gemma 3 12B | 128k | Google's latest |
+| DeepSeek R1 | 163k | Deep reasoning |
+| DeepSeek R1 Distill 70B | 128k | Reasoning + speed |
+| Qwen 2.5 7B | 128k | Code generation |
+| Mistral Nemo 12B | 128k | Balanced |
+| OpenChat 7B | 8k | Conversation |
+| + 3 more | — | — |
 
-```
-CodeForge-AI/
-├── frontend/          # React 19 + Vite + TypeScript → deploy to Vercel
-├── node_api/          # Express + WebSocket API → deploy to Render
-├── backend/           # FastAPI + LangGraph agents → deploy to Render
-├── vscode-extension/  # VS Code extension (publish to Marketplace)
-├── .env.example       # All required env vars
-├── Makefile           # Dev shortcuts
-├── render.yaml        # One-click Render deploy
-└── vercel.json        # Vercel SPA rewrites
-```
+### Groq (free, ultra-fast ~200ms)
+| Model | Context | Best For |
+|-------|---------|---------|
+| Llama 4 Maverick 17B (128E) | 128k | Best overall |
+| Llama 4 Scout 17B (16E) | 128k | Fast + capable |
+| Llama 3.3 70B Versatile | 128k | Complex tasks |
+| Llama 3.1 8B Instant | 128k | Fastest |
+| Qwen QwQ 32B | 128k | Math + reasoning |
+| DeepSeek R1 Distill 70B | 128k | Reasoning |
+| Compound Beta | 128k | Agentic tasks |
+| + 5 more | — | — |
 
-## Local Setup
+---
+
+## Quick Start
 
 ### Prerequisites
-- **Node.js 20+**
-- **Python 3.11+**
-- **MongoDB Atlas** free cluster → [mongodb.com](https://www.mongodb.com/atlas)
-- **OpenRouter** free API key → [openrouter.ai](https://openrouter.ai)
-- **GitHub OAuth App** → [github.com/settings/apps](https://github.com/settings/apps)
+- Node.js 18+ — https://nodejs.org
+- Python 3.11+ — https://python.org/downloads
+- MongoDB Atlas free account — https://cloud.mongodb.com
 
-### Step 1 — Clone & Install
+### Get Free API Keys
+- **OpenRouter**: https://openrouter.ai/keys (no credit card)
+- **Groq**: https://console.groq.com/keys (no credit card)
+- **Tavily** (web search): https://tavily.com (free tier)
+
+### Clone & Setup
 
 ```bash
 git clone https://github.com/yathik-2622/CodeForge-AI.git
 cd CodeForge-AI
-
-# Install all at once
-make install
-# Or individually:
-cd frontend   && npm install
-cd ../node_api && npm install
-cd ../backend  && pip install -r requirements.txt
 ```
 
-### Step 2 — Environment Variables
+Create `backend/.env`:
+```
+MONGODB_URL=mongodb+srv://USER:PASS@cluster.mongodb.net
+MONGODB_DB=codeforge
+OPENROUTER_API_KEY=sk-or-v1-...
+GROQ_API_KEY=gsk_...
+GITHUB_CLIENT_ID=your_github_oauth_client_id
+GITHUB_CLIENT_SECRET=your_github_oauth_client_secret
+SESSION_SECRET=any-random-32-char-string
+TAVILY_API_KEY=tvly-...
+PORT=9000
+FRONTEND_URL=http://localhost:5173
+```
 
-Copy `.env.example` to each service directory:
+Create `node_api/.env`:
+```
+MONGODB_URL=mongodb+srv://USER:PASS@cluster.mongodb.net
+MONGODB_DB=codeforge
+OPENROUTER_API_KEY=sk-or-v1-...
+GROQ_API_KEY=gsk_...
+GITHUB_CLIENT_ID=your_github_oauth_client_id
+GITHUB_CLIENT_SECRET=your_github_oauth_client_secret
+SESSION_SECRET=any-random-32-char-string
+PORT=3000
+```
+
+Create `frontend/.env`:
+```
+VITE_API_URL=http://localhost:3000
+VITE_PYTHON_API_URL=http://localhost:9000
+```
+
+### Run (3 terminals)
 
 ```bash
-cp .env.example frontend/.env.local
-cp .env.example node_api/.env
-cp .env.example backend/.env
+# Terminal 1 — Frontend
+cd frontend && npm install && npm run dev
+
+# Terminal 2 — Node API
+cd node_api && npm install && npm run dev
+
+# Terminal 3 — Python Backend
+cd backend && python -m venv .venv && source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python -m uvicorn main:app --host 0.0.0.0 --port 9000 --reload
 ```
 
-Then edit each file with real values (see [env vars table](#environment-variables) below).
+Open http://localhost:5173
 
-#### Create GitHub OAuth App
-1. Go to **GitHub → Settings → Developer Settings → OAuth Apps → New OAuth App**
-2. Set **Callback URL** to `http://localhost:8080/api/auth/github/callback`
-3. Copy **Client ID** and **Client Secret** → add to `.env`
+---
 
-### Step 3 — Run Locally
+## CLI — `cf` Command
 
-Open **3 terminals**:
+The CLI is a full autonomous coding agent in your terminal — like Claude Code.
 
+### Install
 ```bash
-# Terminal 1 – Frontend (http://localhost:5173)
-cd frontend && npm run dev
-
-# Terminal 2 – Node.js API (http://localhost:8080)
-cd node_api && npm run dev
-
-# Terminal 3 – Python API (http://localhost:9000)
-cd backend && uvicorn main:app --reload --port 9000
+cd cli
+npm install
+npm run build
+npm link
 ```
 
-Open `http://localhost:5173` — the frontend proxies `/api` to `localhost:8080`.
-
-### Step 4 — Seed Sample Data (optional)
-
+### Save API Keys (one time)
 ```bash
-cd node_api && node scripts/seed.mjs
+cf config --openrouter-key sk-or-v1-...
+cf config --groq-key gsk_...
 ```
 
-## Environment Variables
+### All Commands
 
-| Variable | Service | Required | Description |
-|----------|---------|----------|-------------|
-| `MONGODB_URL` | node_api, backend | ✅ | MongoDB Atlas connection string |
-| `MONGODB_DB` | node_api, backend | ✅ | Database name (default: `CodeForge_AI`) |
-| `OPENROUTER_API_KEY` | node_api, backend | ✅ | AI completions (free models available) |
-| `QDRANT_URL` | backend | ✅ | Qdrant cloud cluster URL |
-| `QDRANT_API_KEY` | backend | ✅ | Qdrant API key |
-| `GITHUB_CLIENT_ID` | node_api | ✅ | GitHub OAuth app client ID |
-| `GITHUB_CLIENT_SECRET` | node_api | ✅ | GitHub OAuth app secret |
-| `SESSION_SECRET` | node_api | ✅ | 32+ char random string for JWT signing |
-| `TAVILY_API_KEY` | node_api, backend | ☐ | Web search (optional but recommended) |
-| `TWILIO_ACCOUNT_SID` | node_api | ☐ | WhatsApp bot (optional) |
-| `TWILIO_AUTH_TOKEN` | node_api | ☐ | WhatsApp bot (optional) |
-| `TWILIO_WHATSAPP_FROM` | node_api | ☐ | E.g. `whatsapp:+14155238886` |
-| `APP_URL` | node_api | prod | Public URL of node_api |
-| `FRONTEND_URL` | node_api | prod | Public URL of frontend |
-| `ALLOWED_ORIGINS` | node_api | prod | Comma-separated allowed CORS origins |
-| `VITE_API_URL` | frontend | prod | Points to node_api (e.g. `https://api.example.com`) |
+| Command | Description |
+|---------|-------------|
+| `cf` | Interactive AI chat with your project context |
+| `cf ask "question"` | Quick one-shot answer |
+| `cf fix file.ts` | AI-powered fix with diff preview |
+| `cf explain file.ts` | Explain code in plain English |
+| `cf analyze .` | Audit entire project for bugs/security |
+| `cf generate "description"` | Generate a complete file from description |
+| `cf commit` | AI-generated conventional commit message |
+| `cf run "cmd" --watch` | Run command + auto-fix loop until it passes |
+| `cf models` | List all 23 models |
+| `cf config` | View/set configuration |
+| `cf status` | Check server connectivity |
 
-## Deploy to Vercel + Render
-
-### Frontend → Vercel
-
-1. Push to GitHub
-2. Import repo in **Vercel** → select `frontend/` as root directory
-3. Set `VITE_API_URL=https://your-render-api.onrender.com`
-4. Deploy → get your `.vercel.app` URL
-
-### Backend → Render (one-click)
-
-Click **"New → Blueprint"** in Render and point to this repo — `render.yaml` auto-configures both services.
-
-Or manually:
+### `cf generate` Examples
+```bash
+cf generate "FastAPI endpoint for user registration with JWT auth"
+cf generate "React hook to debounce input" --out src/hooks/useDebounce.ts
+cf generate "PostgreSQL schema for a multi-tenant SaaS" --lang sql
+cf generate "Python script to parse CSV and insert into MongoDB"
+cf generate "Express middleware for rate limiting with Redis"
 ```
-Service 1: node_api/   (Node) – build: npm install && npm run build – start: node dist/index.mjs
-Service 2: backend/    (Python) – build: pip install -r requirements.txt – start: uvicorn main:app ...
+
+### `cf run --watch` (Autonomous Fix Loop)
+```bash
+cf run "npm test" --watch          # AI fixes failures until tests pass
+cf run "cargo build" --watch       # Fix Rust compilation errors automatically
+cf run "pytest" --max-attempts 5   # Retry up to 5 times
 ```
+
+---
 
 ## VS Code Extension
 
+Adds CodeForge AI directly inside VS Code.
+
+### Install
 ```bash
 cd vscode-extension
 npm install
-# Press F5 to launch Extension Development Host
-# Or package it:
-npx vsce package
+npm run compile
+npx vsce package --no-dependencies
+code --install-extension codeforge-ai-0.1.0.vsix
 ```
 
-Set `CODEFORGE_URL` in VS Code settings to point to your deployed API.
+### Features
+- Right-click any code → **Ask / Fix / Explain / Generate Tests / Refactor**
+- Sidebar chat panel with session history
+- Model selector (`Ctrl+Shift+M`) — all 23 models
+- Keyboard shortcuts:
+  - `Ctrl+Shift+A` — Open chat
+  - `Ctrl+Shift+Q` — Ask about selection
+  - `Ctrl+Shift+F` — Fix selection
 
-## AI Models (free via OpenRouter)
+---
 
-| Model | Speed | Context | Best for |
-|-------|-------|---------|----------|
-| Mistral 7B Instruct | Fast | 32k | General coding, quick fixes |
-| Llama 3 8B Instruct | Fast | 8k | Code generation |
-| Phi-3 Mini 128k | Medium | 128k | Long file analysis |
-| Gemma 3 12B | Medium | 8k | Code review |
+## WhatsApp Integration
+
+Chat with CodeForge AI on WhatsApp via Twilio.
+
+1. Create free Twilio account → enable WhatsApp Sandbox
+2. Expose backend: `ngrok http 9000`
+3. Set webhook: `https://YOUR_NGROK_URL/api/whatsapp/webhook`
+4. Add to `backend/.env`:
+   ```
+   TWILIO_ACCOUNT_SID=ACxxxxx
+   TWILIO_AUTH_TOKEN=xxxxx
+   TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+   ```
+5. Restart backend → `"whatsapp": "configured"` in health check
+
+**WhatsApp commands:** `hi`, `/help`, `/new`, `/history`, or any coding question.
+
+**Display name "CodeForge AI":** Requires a registered WhatsApp Business number (Meta approval, 1-3 days).
+
+---
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                     CodeForge AI Stack                       │
+│                                                              │
+│  ┌─────────────┐    ┌──────────────────┐  ┌─────────────┐  │
+│  │  Frontend   │◄──►│  Node.js API     │  │ Python API  │  │
+│  │ React + TS  │    │  :3000           │  │ FastAPI     │  │
+│  │ Vite + TW4  │    │  AI streaming    │  │ :9000       │  │
+│  │  :5173      │    │  GitHub OAuth    │  │ LangGraph   │  │
+│  └─────────────┘    │  WebSocket       │  │ WhatsApp    │  │
+│                     └────────┬─────────┘  └──────┬──────┘  │
+│  ┌─────────────┐             │                   │          │
+│  │  CLI (cf)   │             └─────────┬─────────┘          │
+│  │  Terminal   │                       ▼                     │
+│  │  Agent      │    ┌──────────────────────────────────┐    │
+│  └─────────────┘    │         MongoDB Atlas             │    │
+│                     │    + Qdrant (vector search)       │    │
+│  ┌─────────────┐    └──────────────────────────────────┘    │
+│  │  VS Code    │                                             │
+│  │  Extension  │    ┌──────────────────────────────────┐    │
+│  └─────────────┘    │  OpenRouter (11 free models)     │    │
+│                     │  + Groq (12 ultra-fast models)   │    │
+│                     └──────────────────────────────────┘    │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Do you need both Node API and FastAPI?**
+
+Short answer: Yes, they serve different purposes.
+- **Node API** — Real-time AI streaming (SSE/WebSocket), GitHub OAuth sessions, dashboard
+- **FastAPI** — AI agents (LangGraph), MongoDB, WhatsApp webhook, web search (Tavily)
+
+If you want to simplify, you could migrate the AI streaming to FastAPI, but the Node API's Fastify/WS stack handles concurrent streams more efficiently.
+
+---
+
+## Deployment
+
+- **Frontend** → Vercel (set `VITE_API_URL` to your Render URL)
+- **Node API** → Render (web service, Node 20)
+- **Python Backend** → Render (web service, Python 3.11)
+- **MongoDB** → Atlas (free M0 tier)
+
+See `SETUP.md` for complete setup, testing, and troubleshooting guide.
+
+---
 
 ## License
 
-MIT — fork it, self-host it, ship it.
+MIT — use it, fork it, ship it.
