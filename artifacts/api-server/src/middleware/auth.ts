@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 const JWT_SECRET = process.env.SESSION_SECRET ?? "codeforge-dev-secret-change-in-production";
 
 export interface JwtPayload {
-  userId: number;
+  userId: string;
   githubLogin: string;
   avatarUrl: string | null;
 }

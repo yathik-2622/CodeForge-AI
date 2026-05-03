@@ -1,49 +1,65 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
-import { executionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { col, ObjectId } from "@workspace/db";
+import type { Execution } from "@workspace/db";
 import { CreateExecutionBody, GetExecutionParams } from "@workspace/api-zod";
 
 const BLOCKED_PATTERNS = [/rm\s+-rf/, /drop\s+table/i, /shutdown/, /format\s+c:/i, /mkfs/];
 
-const fmt = (e: typeof executionsTable.$inferSelect) => ({
-  id: String(e.id),
-  command: e.command,
-  status: e.status,
-  output: e.output,
-  exitCode: e.exitCode ?? null,
-  sessionId: e.sessionId ? String(e.sessionId) : null,
-  durationMs: e.durationMs ?? null,
-  createdAt: e.createdAt.toISOString(),
-});
+function fmt(e: Execution & { _id: ObjectId }) {
+  return {
+    id: e._id.toString(),
+    command: e.command,
+    status: e.status,
+    output: e.output,
+    exitCode: e.exitCode ?? null,
+    sessionId: e.sessionId ?? null,
+    durationMs: e.durationMs ?? null,
+    createdAt: e.createdAt.toISOString(),
+  };
+}
 
 const router: IRouter = Router();
 
 router.get("/executions", async (_req, res) => {
-  const rows = await db.select().from(executionsTable).orderBy(executionsTable.createdAt);
-  res.json(rows.map(fmt));
+  const executions = await col<Execution>("executions");
+  const rows = await executions.find({}).sort({ createdAt: 1 }).toArray();
+  res.json(rows.map(fmt as any));
 });
 
 router.post("/executions", async (req, res) => {
   const body = CreateExecutionBody.parse(req.body);
+  const executions = await col<Execution>("executions");
   const isBlocked = BLOCKED_PATTERNS.some((p) => p.test(body.command));
   const start = Date.now();
+  const now = new Date();
+
   if (isBlocked) {
-    const [exec] = await db.insert(executionsTable).values({
+    const doc = {
       command: body.command,
-      status: "blocked",
+      status: "blocked" as const,
       output: "Command blocked: destructive or dangerous commands are not permitted.",
-      sessionId: body.sessionId ? Number(body.sessionId) : null,
-    }).returning();
-    res.status(201).json(fmt(exec));
+      sessionId: body.sessionId ?? null,
+      exitCode: null,
+      durationMs: null,
+      createdAt: now,
+    };
+    const result = await executions.insertOne(doc as any);
+    res.status(201).json(fmt({ ...doc, _id: result.insertedId } as any));
     return;
   }
-  const [exec] = await db.insert(executionsTable).values({
+
+  const doc = {
     command: body.command,
-    status: "running",
+    status: "running" as const,
     output: "",
-    sessionId: body.sessionId ? Number(body.sessionId) : null,
-  }).returning();
+    sessionId: body.sessionId ?? null,
+    exitCode: null,
+    durationMs: null,
+    createdAt: now,
+  };
+  const result = await executions.insertOne(doc as any);
+  const insertedId = result.insertedId;
+
   setTimeout(async () => {
     const duration = Date.now() - start;
     const outputs: Record<string, string> = {
@@ -55,16 +71,21 @@ router.post("/executions", async (req, res) => {
     };
     const outputKey = Object.keys(outputs).find((k) => body.command.includes(k));
     const output = outputKey ? outputs[outputKey] : `$ ${body.command}\nCommand executed successfully.`;
-    await db.update(executionsTable).set({ status: "success", output, exitCode: 0, durationMs: duration }).where(eq(executionsTable.id, exec.id));
+    await executions.updateOne(
+      { _id: insertedId },
+      { $set: { status: "success", output, exitCode: 0, durationMs: duration } },
+    );
   }, 2000);
-  res.status(201).json(fmt(exec));
+
+  res.status(201).json(fmt({ ...doc, _id: insertedId } as any));
 });
 
 router.get("/executions/:id", async (req, res) => {
   const { id } = GetExecutionParams.parse(req.params);
-  const [exec] = await db.select().from(executionsTable).where(eq(executionsTable.id, Number(id)));
+  const executions = await col<Execution>("executions");
+  const exec = await executions.findOne({ _id: new ObjectId(id) });
   if (!exec) { res.status(404).json({ error: "Not found" }); return; }
-  res.json(fmt(exec));
+  res.json(fmt(exec as any));
 });
 
 export default router;

@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { col, ObjectId } from "@workspace/db";
+import type { User, Repository } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
 import { searchGitHubRepos, getUserRepos, getRepoContents, scanRepository } from "../lib/github";
 import { FREE_MODELS } from "../lib/ai";
@@ -9,8 +8,9 @@ import { webSearch } from "../lib/search";
 
 const router: IRouter = Router();
 
-async function getUserToken(userId: number): Promise<string> {
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+async function getUserToken(userId: string): Promise<string> {
+  const users = await col<User>("users");
+  const user = await users.findOne({ _id: new ObjectId(userId) });
   if (!user?.githubToken) throw new Error("No GitHub token for user");
   return user.githubToken;
 }
@@ -60,10 +60,10 @@ router.post("/github/repos/:owner/:repo/import", requireAuth, async (req, res) =
     res.json({ status: "scanning", message: `Starting scan of ${owner}/${repo}...` });
 
     scanRepository(token, owner, repo).then(async (scanData) => {
-      const { repositoriesTable } = await import("@workspace/db");
-      const [existing] = await db.select().from(repositoriesTable).where(eq(repositoriesTable.fullName, `${owner}/${repo}`)).limit(1);
+      const repos = await col<Repository>("repositories");
+      const existing = await repos.findOne({ fullName: `${owner}/${repo}` });
       if (!existing) {
-        await db.insert(repositoriesTable).values({
+        await repos.insertOne({
           name: repo,
           fullName: `${owner}/${repo}`,
           provider: "github" as const,
@@ -80,7 +80,8 @@ router.post("/github/repos/:owner/:repo/import", requireAuth, async (req, res) =
           description: `GitHub repository ${owner}/${repo}`,
           dependencies: [],
           cicdPlatform: null,
-        });
+          createdAt: new Date(),
+        } as any);
       }
     }).catch((err) => {
       console.error("Background scan error:", err);

@@ -1,27 +1,30 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
-import { repositoriesTable, agentsTable, securityFindingsTable, deploymentsTable, activityTable, sessionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { col } from "@workspace/db";
+import type { Repository, Agent, SecurityFinding, Deployment, Activity, Session } from "@workspace/db";
 
 const router: IRouter = Router();
 
 router.get("/dashboard/stats", async (_req, res) => {
   const [repos, agents, findings, deployments, sessions] = await Promise.all([
-    db.select().from(repositoriesTable),
-    db.select().from(agentsTable),
-    db.select().from(securityFindingsTable),
-    db.select().from(deploymentsTable),
-    db.select().from(sessionsTable),
+    col<Repository>("repositories").then((c) => c.find({}).toArray()),
+    col<Agent>("agents").then((c) => c.find({}).toArray()),
+    col<SecurityFinding>("security_findings").then((c) => c.find({}).toArray()),
+    col<Deployment>("deployments").then((c) => c.find({}).toArray()),
+    col<Session>("sessions").then((c) => c.find({}).toArray()),
   ]);
+
   const repositoriesByProvider: Record<string, number> = {};
   for (const r of repos) repositoriesByProvider[r.provider] = (repositoriesByProvider[r.provider] ?? 0) + 1;
+
   const agentsByStatus: Record<string, number> = {};
   for (const a of agents) agentsByStatus[a.status] = (agentsByStatus[a.status] ?? 0) + 1;
+
   const criticalIssues = findings.filter((f) => f.severity === "critical" && f.status === "open").length;
   const openIssues = findings.filter((f) => f.status === "open").length;
   const successfulDeps = deployments.filter((d) => d.status === "success").length;
   const activeAgents = agents.filter((a) => a.status === "running" || a.status === "waiting").length;
   const tasksCompleted = agents.reduce((sum, a) => sum + a.tasksCompleted, 0);
+
   res.json({
     totalRepositories: repos.length,
     activeAgents,
@@ -37,13 +40,14 @@ router.get("/dashboard/stats", async (_req, res) => {
 });
 
 router.get("/dashboard/activity", async (_req, res) => {
-  const rows = await db.select().from(activityTable).orderBy(activityTable.createdAt).limit(30);
+  const activity = await col<Activity>("activity");
+  const rows = await activity.find({}).sort({ createdAt: -1 }).limit(30).toArray();
   res.json(rows.map((a) => ({
-    id: String(a.id),
+    id: a._id.toString(),
     type: a.type,
     title: a.title,
     description: a.description,
-    repositoryId: a.repositoryId ? String(a.repositoryId) : null,
+    repositoryId: a.repositoryId ?? null,
     repositoryName: a.repositoryName ?? null,
     agentType: a.agentType ?? null,
     severity: a.severity ?? null,

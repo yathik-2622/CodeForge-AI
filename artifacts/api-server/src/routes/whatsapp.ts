@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
-import { sessionsTable, messagesTable } from "@workspace/db";
-import { eq, and, desc } from "drizzle-orm";
+import { col, ObjectId } from "@workspace/db";
+import type { Session, Message } from "@workspace/db";
 import { streamCompletion, type ChatMessage } from "../lib/ai";
 import { webSearch } from "../lib/search";
 import { logger } from "../lib/logger";
@@ -36,32 +35,31 @@ async function sendWhatsAppMessage(to: string, body: string): Promise<void> {
 
 function chunkMessage(text: string, size: number): string[] {
   const chunks: string[] = [];
-  for (let i = 0; i < text.length; i += size) {
-    chunks.push(text.slice(i, i + size));
-  }
+  for (let i = 0; i < text.length; i += size) chunks.push(text.slice(i, i + size));
   return chunks.length > 0 ? chunks : [text];
 }
 
-async function getOrCreateWhatsAppSession(phone: string): Promise<{ id: number; isNew: boolean }> {
+async function getOrCreateWhatsAppSession(phone: string): Promise<{ id: string; isNew: boolean }> {
   const title = `WhatsApp: ${phone}`;
-  const existing = await db.select().from(sessionsTable)
-    .where(eq(sessionsTable.title, title))
-    .orderBy(desc(sessionsTable.updatedAt))
-    .limit(1);
+  const sessions = await col<Session>("sessions");
+  const existing = await sessions.find({ title }).sort({ updatedAt: -1 }).limit(1).toArray();
 
   if (existing.length > 0) {
     const daysSinceUpdate = (Date.now() - existing[0].updatedAt.getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSinceUpdate < 7) {
-      return { id: existing[0].id, isNew: false };
-    }
+    if (daysSinceUpdate < 7) return { id: existing[0]._id.toString(), isNew: false };
   }
 
-  const [session] = await db.insert(sessionsTable).values({
+  const now = new Date();
+  const result = await sessions.insertOne({
     title,
     model: "mistralai/mistral-7b-instruct:free",
-    status: "active",
-  }).returning();
-  return { id: session.id, isNew: true };
+    status: "active" as const,
+    messageCount: 0,
+    repositoryId: null,
+    createdAt: now,
+    updatedAt: now,
+  } as any);
+  return { id: result.insertedId.toString(), isNew: true };
 }
 
 router.post("/whatsapp/webhook", async (req, res) => {
@@ -81,33 +79,27 @@ router.post("/whatsapp/webhook", async (req, res) => {
   }
 
   res.status(200).send("<?xml version='1.0' encoding='UTF-8'?><Response></Response>");
-
-  processWhatsAppMessage(from, text).catch((err) => {
-    logger.error(err, "WhatsApp processing error");
-  });
+  processWhatsAppMessage(from, text).catch((err) => logger.error(err, "WhatsApp processing error"));
 });
 
 async function processWhatsAppMessage(from: string, text: string): Promise<void> {
   try {
     const { id: sessionId, isNew } = await getOrCreateWhatsAppSession(from);
-
     const commandHandled = await handleCommand(from, text, sessionId, isNew);
     if (commandHandled) return;
 
-    await db.insert(messagesTable).values({
-      sessionId,
-      role: "user",
-      content: text,
-    });
+    const messages = await col<Message>("messages");
+    const sessions = await col<Session>("sessions");
+    const now = new Date();
 
-    await db.update(sessionsTable)
-      .set({ status: "active", updatedAt: new Date() })
-      .where(eq(sessionsTable.id, sessionId));
+    await messages.insertOne({ sessionId, role: "user" as const, content: text, createdAt: now } as any);
+    await sessions.updateOne({ _id: new ObjectId(sessionId) }, { $set: { status: "active", updatedAt: now } });
 
-    const history = await db.select().from(messagesTable)
-      .where(eq(messagesTable.sessionId, sessionId))
-      .orderBy(messagesTable.createdAt)
-      .limit(15);
+    const history = await messages
+      .find({ sessionId })
+      .sort({ createdAt: 1 })
+      .limit(15)
+      .toArray();
 
     const needsSearch = /search|find|latest|recent|news|what is|how to|docs/i.test(text);
     let searchContext = "";
@@ -115,24 +107,21 @@ async function processWhatsAppMessage(from: string, text: string): Promise<void>
       try {
         const results = await webSearch(text, 2);
         if (results.length > 0) {
-          searchContext = "\n\n[Web]\n" + results.map((r) => `• ${r.title}\n${r.content?.slice(0, 200)}`).join("\n\n");
+          searchContext = "\n\n[Web]\n" + results.map((r: any) => `• ${r.title}\n${r.content?.slice(0, 200)}`).join("\n\n");
         }
-      } catch {}
+      } catch { }
     }
 
-    const messages: ChatMessage[] = history.slice(-8).map((m) => ({
+    const chatHistory: ChatMessage[] = history.slice(-8).map((m) => ({
       role: m.role === "user" ? "user" : "assistant",
       content: m.content,
     }));
-
-    if (searchContext && messages.length > 0) {
-      messages[messages.length - 1].content += searchContext;
-    }
+    if (searchContext && chatHistory.length > 0) chatHistory[chatHistory.length - 1].content += searchContext;
 
     let fullResponse = "";
     await new Promise<void>((resolve, reject) => {
       streamCompletion(
-        messages,
+        chatHistory,
         "mistralai/mistral-7b-instruct:free",
         (token) => { fullResponse += token; },
         resolve,
@@ -141,21 +130,19 @@ async function processWhatsAppMessage(from: string, text: string): Promise<void>
     });
 
     if (fullResponse) {
-      await db.insert(messagesTable).values({
+      const nowDone = new Date();
+      await messages.insertOne({
         sessionId,
-        role: "agent",
+        role: "agent" as const,
         content: fullResponse,
         agentType: "coding",
-      });
-
-      await db.update(sessionsTable)
-        .set({ status: "idle", updatedAt: new Date() })
-        .where(eq(sessionsTable.id, sessionId));
-
-      const cleaned = fullResponse
-        .replace(/```[\w]*\n/g, "```\n")
-        .slice(0, MAX_WA_LENGTH * 3);
-
+        createdAt: nowDone,
+      } as any);
+      await sessions.updateOne(
+        { _id: new ObjectId(sessionId) },
+        { $set: { status: "idle", updatedAt: nowDone } },
+      );
+      const cleaned = fullResponse.replace(/```[\w]*\n/g, "```\n").slice(0, MAX_WA_LENGTH * 3);
       await sendWhatsAppMessage(from, cleaned);
     }
   } catch (err) {
@@ -164,55 +151,44 @@ async function processWhatsAppMessage(from: string, text: string): Promise<void>
   }
 }
 
-async function handleCommand(from: string, text: string, sessionId: number, isNew: boolean): Promise<boolean> {
+async function handleCommand(from: string, text: string, sessionId: string, isNew: boolean): Promise<boolean> {
   const lower = text.toLowerCase().trim();
 
   if (lower === "/start" || lower === "hi" || lower === "hello" || lower === "start" || isNew) {
     await sendWhatsAppMessage(from,
       `⚡ *CodeForge AI* — Your autonomous coding agent\n\n` +
-      `I can help you:\n` +
-      `• Write and fix code\n` +
-      `• Search the web for docs\n` +
-      `• Explain programming concepts\n` +
-      `• Debug errors\n\n` +
-      `Just send me your coding question!\n\n` +
-      `Commands:\n` +
-      `/help — Show this menu\n` +
-      `/new — Start fresh session\n` +
-      `/history — See recent messages`
+      `I can help you:\n• Write and fix code\n• Search the web for docs\n• Explain programming concepts\n• Debug errors\n\n` +
+      `Commands:\n/help — Show this menu\n/new — Start fresh session\n/history — See recent messages`,
     );
     return lower === "/start" || lower === "start";
   }
 
   if (lower === "/help") {
     await sendWhatsAppMessage(from,
-      `⚡ *CodeForge AI Commands*\n\n` +
-      `/new — Start a new conversation\n` +
-      `/history — Last 3 messages\n` +
-      `/help — Show this menu\n\n` +
-      `Or just ask anything like:\n` +
-      `"Fix this Python error: ..."\n` +
-      `"How do I use async/await?"\n` +
-      `"Search for React best practices"`
+      `⚡ *CodeForge AI Commands*\n\n/new — Start a new conversation\n/history — Last 3 messages\n/help — Show this menu`,
     );
     return true;
   }
 
   if (lower === "/new") {
-    await db.insert(sessionsTable).values({
+    const sessions = await col<Session>("sessions");
+    const now = new Date();
+    await sessions.insertOne({
       title: `WhatsApp: ${from}`,
       model: "mistralai/mistral-7b-instruct:free",
-      status: "active",
-    });
+      status: "active" as const,
+      messageCount: 0,
+      repositoryId: null,
+      createdAt: now,
+      updatedAt: now,
+    } as any);
     await sendWhatsAppMessage(from, "✅ New session started! What would you like to build?");
     return true;
   }
 
   if (lower === "/history") {
-    const msgs = await db.select().from(messagesTable)
-      .where(eq(messagesTable.sessionId, sessionId))
-      .orderBy(desc(messagesTable.createdAt))
-      .limit(6);
+    const messages = await col<Message>("messages");
+    const msgs = await messages.find({ sessionId }).sort({ createdAt: -1 }).limit(6).toArray();
     if (msgs.length === 0) {
       await sendWhatsAppMessage(from, "No history yet. Ask your first question!");
     } else {
@@ -237,7 +213,7 @@ router.get("/whatsapp/status", (_req, res) => {
           "1. Create a free Twilio account at https://twilio.com",
           "2. Enable WhatsApp Sandbox in the Twilio console",
           "3. Set env vars: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM",
-          `4. Set webhook URL in Twilio to: ${process.env.APP_URL ?? "<YOUR_APP_URL>"}/api/whatsapp/webhook`,
+          `4. Set webhook URL to: ${process.env.APP_URL ?? "<YOUR_APP_URL>"}/api/whatsapp/webhook`,
         ],
   });
 });

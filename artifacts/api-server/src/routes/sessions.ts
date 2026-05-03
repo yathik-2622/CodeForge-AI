@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
-import { sessionsTable, messagesTable, usersTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { col, ObjectId } from "@workspace/db";
+import type { Session, Message } from "@workspace/db";
 import { CreateSessionBody, GetSessionParams, SendMessageParams, SendMessageBody } from "@workspace/api-zod";
 import { streamCompletion, type ChatMessage } from "../lib/ai";
 import { webSearch } from "../lib/search";
@@ -9,85 +8,105 @@ import { rooms } from "../lib/websocket";
 
 const router: IRouter = Router();
 
-const fmt = (s: typeof sessionsTable.$inferSelect) => ({
-  id: String(s.id),
-  title: s.title,
-  repositoryId: s.repositoryId ? String(s.repositoryId) : null,
-  status: s.status,
-  model: s.model,
-  messageCount: s.messageCount,
-  createdAt: s.createdAt.toISOString(),
-  updatedAt: s.updatedAt.toISOString(),
-});
+function fmtSession(s: Session & { _id: ObjectId }) {
+  return {
+    id: s._id.toString(),
+    title: s.title,
+    repositoryId: s.repositoryId ?? null,
+    status: s.status,
+    model: s.model,
+    messageCount: s.messageCount,
+    createdAt: s.createdAt.toISOString(),
+    updatedAt: s.updatedAt.toISOString(),
+  };
+}
 
-const fmtMsg = (m: typeof messagesTable.$inferSelect) => ({
-  id: String(m.id),
-  sessionId: String(m.sessionId),
-  role: m.role,
-  content: m.content,
-  agentType: m.agentType ?? null,
-  metadata: m.metadata ?? null,
-  createdAt: m.createdAt.toISOString(),
-});
+function fmtMessage(m: Message & { _id: ObjectId }) {
+  return {
+    id: m._id.toString(),
+    sessionId: m.sessionId,
+    role: m.role,
+    content: m.content,
+    agentType: m.agentType ?? null,
+    metadata: m.metadata ?? null,
+    createdAt: m.createdAt.toISOString(),
+  };
+}
 
 router.get("/sessions", async (_req, res) => {
-  const rows = await db.select().from(sessionsTable).orderBy(desc(sessionsTable.updatedAt));
-  res.json(rows.map(fmt));
+  const sessions = await col<Session>("sessions");
+  const rows = await sessions.find({}).sort({ updatedAt: -1 }).toArray();
+  res.json(rows.map(fmtSession as any));
 });
 
 router.post("/sessions", async (req, res) => {
   const body = CreateSessionBody.parse(req.body);
-  const [session] = await db.insert(sessionsTable).values({
+  const sessions = await col<Session>("sessions");
+  const now = new Date();
+  const doc = {
     title: body.title,
-    repositoryId: body.repositoryId ? Number(body.repositoryId) : null,
-    model: body.model,
-    status: "active",
-  }).returning();
-  res.status(201).json(fmt(session));
+    repositoryId: body.repositoryId ?? null,
+    model: body.model ?? "mistralai/mistral-7b-instruct:free",
+    status: "active" as const,
+    messageCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const result = await sessions.insertOne(doc as any);
+  const session = { ...doc, _id: result.insertedId };
+  res.status(201).json(fmtSession(session as any));
 });
 
 router.get("/sessions/:id", async (req, res) => {
   const { id } = GetSessionParams.parse(req.params);
-  const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, Number(id)));
+  const sessions = await col<Session>("sessions");
+  const session = await sessions.findOne({ _id: new ObjectId(id) });
   if (!session) { res.status(404).json({ error: "Not found" }); return; }
-  res.json(fmt(session));
+  res.json(fmtSession(session as any));
 });
 
 router.get("/sessions/:id/messages", async (req, res) => {
   const { id } = SendMessageParams.parse(req.params);
-  const msgs = await db.select().from(messagesTable)
-    .where(eq(messagesTable.sessionId, Number(id)))
-    .orderBy(messagesTable.createdAt);
-  res.json(msgs.map(fmtMsg));
+  const messages = await col<Message>("messages");
+  const msgs = await messages.find({ sessionId: id }).sort({ createdAt: 1 }).toArray();
+  res.json(msgs.map(fmtMessage as any));
 });
 
 router.post("/sessions/:id/messages", async (req, res) => {
   const { id } = SendMessageParams.parse(req.params);
   const body = SendMessageBody.parse(req.body);
+  const messages = await col<Message>("messages");
+  const sessions = await col<Session>("sessions");
+  const now = new Date();
 
-  const [msg] = await db.insert(messagesTable).values({
-    sessionId: Number(id),
-    role: "user",
+  const doc = {
+    sessionId: id,
+    role: "user" as const,
     content: body.content,
-  }).returning();
-
-  await db.update(sessionsTable)
-    .set({ status: "active", updatedAt: new Date() })
-    .where(eq(sessionsTable.id, Number(id)));
-
-  res.status(201).json(fmtMsg(msg));
+    createdAt: now,
+  };
+  const result = await messages.insertOne(doc as any);
+  await sessions.updateOne(
+    { _id: new ObjectId(id) },
+    { $set: { status: "active", updatedAt: now } },
+  );
+  const msg = { ...doc, _id: result.insertedId };
+  res.status(201).json(fmtMessage(msg as any));
 });
 
 router.post("/sessions/:id/stream", async (req, res): Promise<void> => {
   const { id } = SendMessageParams.parse(req.params);
+  const sessions = await col<Session>("sessions");
+  const messages = await col<Message>("messages");
 
-  const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.id, Number(id)));
+  const session = await sessions.findOne({ _id: new ObjectId(id) });
   if (!session) { res.status(404).json({ error: "Not found" }); return; }
 
-  const history = await db.select().from(messagesTable)
-    .where(eq(messagesTable.sessionId, Number(id)))
-    .orderBy(messagesTable.createdAt)
-    .limit(20);
+  const history = await messages
+    .find({ sessionId: id })
+    .sort({ createdAt: 1 })
+    .limit(20)
+    .toArray();
 
   const userMsg = history.filter((m) => m.role === "user").at(-1);
   if (!userMsg) { res.status(400).json({ error: "No user message to respond to" }); return; }
@@ -101,19 +120,19 @@ router.post("/sessions/:id/stream", async (req, res): Promise<void> => {
       const results = await webSearch(userContent, 3);
       if (results.length > 0) {
         searchContext = "\n\n[Web search results]\n" + results
-          .map((r) => `**${r.title}**\n${r.url}\n${r.content}`)
+          .map((r: any) => `**${r.title}**\n${r.url}\n${r.content}`)
           .join("\n\n");
       }
     } catch { }
   }
 
-  const messages: ChatMessage[] = history.slice(-10).map((m) => ({
+  const chatHistory: ChatMessage[] = history.slice(-10).map((m) => ({
     role: m.role === "user" ? "user" : "assistant",
     content: m.content,
   }));
 
-  if (searchContext && messages.length > 0) {
-    messages[messages.length - 1].content += searchContext;
+  if (searchContext && chatHistory.length > 0) {
+    chatHistory[chatHistory.length - 1].content += searchContext;
   }
 
   res.setHeader("Content-Type", "text/event-stream");
@@ -132,7 +151,7 @@ router.post("/sessions/:id/stream", async (req, res): Promise<void> => {
   rooms.broadcastToSession(id, { type: "stream_start", sessionId: id });
 
   await streamCompletion(
-    messages,
+    chatHistory,
     session.model,
     (token) => {
       fullContent += token;
@@ -140,21 +159,23 @@ router.post("/sessions/:id/stream", async (req, res): Promise<void> => {
       rooms.broadcastToSession(id, { type: "token", token });
     },
     async () => {
-      const [agentMsg] = await db.insert(messagesTable).values({
-        sessionId: Number(id),
-        role: "agent",
+      const now = new Date();
+      const agentDoc = {
+        sessionId: id,
+        role: "agent" as const,
         content: fullContent,
         agentType: "coding",
         metadata: { model: session.model, searchUsed: !!searchContext },
-      }).returning();
-
-      const count = await db.$count(messagesTable, eq(messagesTable.sessionId, Number(id)));
-      await db.update(sessionsTable)
-        .set({ messageCount: count, updatedAt: new Date(), status: "idle" })
-        .where(eq(sessionsTable.id, Number(id)));
-
-      rooms.broadcastToSession(id, { type: "stream_end", messageId: String(agentMsg.id) });
-      send("done", { messageId: String(agentMsg.id) });
+        createdAt: now,
+      };
+      const agentResult = await messages.insertOne(agentDoc as any);
+      const count = await messages.countDocuments({ sessionId: id });
+      await sessions.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { messageCount: count, updatedAt: now, status: "idle" } },
+      );
+      rooms.broadcastToSession(id, { type: "stream_end", messageId: agentResult.insertedId.toString() });
+      send("done", { messageId: agentResult.insertedId.toString() });
       res.end();
     },
     (err) => {

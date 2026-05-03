@@ -4,7 +4,7 @@ import { useListSessions, useCreateSession, getListSessionsQueryKey } from "@wor
 import { useQueryClient } from "@tanstack/react-query";
 import { Layout, PageHeader } from "@/components/Layout";
 import { StatusBadge } from "@/components/StatusBadge";
-import { MessageSquare, Plus, Cpu } from "lucide-react";
+import { MessageSquare, Plus, Cpu, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -16,17 +16,18 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+const FREE_MODELS = [
+  { id: "mistralai/mistral-7b-instruct:free", label: "Mistral 7B", badge: "Fast" },
+  { id: "meta-llama/llama-3-8b-instruct:free", label: "Llama 3 8B", badge: "Open Source" },
+  { id: "microsoft/phi-3-mini-128k-instruct:free", label: "Phi-3 Mini", badge: "128k ctx" },
+  { id: "google/gemma-3-12b-it:free", label: "Gemma 3 12B", badge: "Google" },
+];
+
 const createSchema = z.object({
   title: z.string().min(1, "Title is required"),
-  model: z.enum(["gpt-4o", "claude-3-5-sonnet", "gemini-2.0-flash"]),
+  model: z.string().min(1),
 });
 type CreateForm = z.infer<typeof createSchema>;
-
-const MODEL_LABELS: Record<string, string> = {
-  "gpt-4o": "GPT-4o",
-  "claude-3-5-sonnet": "Claude 3.5",
-  "gemini-2.0-flash": "Gemini Flash",
-};
 
 export default function Sessions() {
   const [, setLocation] = useLocation();
@@ -37,7 +38,7 @@ export default function Sessions() {
 
   const form = useForm<CreateForm>({
     resolver: zodResolver(createSchema),
-    defaultValues: { title: "", model: "gpt-4o" },
+    defaultValues: { title: "", model: FREE_MODELS[0].id },
   });
 
   const onSubmit = (data: CreateForm) => {
@@ -51,11 +52,14 @@ export default function Sessions() {
     });
   };
 
+  const modelLabel = (id: string) =>
+    FREE_MODELS.find((m) => m.id === id)?.label ?? id.split("/").pop()?.replace(":free", "") ?? id;
+
   return (
     <Layout>
       <PageHeader
         title="Agent Sessions"
-        description={`${sessions?.length ?? 0} sessions`}
+        description={`${sessions?.length ?? 0} sessions — all powered by free OpenRouter models`}
         action={
           <Button size="sm" onClick={() => setOpen(true)} data-testid="button-new-session">
             <Plus className="w-3.5 h-3.5 mr-1.5" /> New Session
@@ -67,7 +71,23 @@ export default function Sessions() {
           <div className="text-center py-16 text-muted-foreground">
             <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-30" />
             <p className="text-sm">No sessions yet</p>
-            <p className="text-xs mt-1">Start a new session to interact with the AI agents</p>
+            <p className="text-xs mt-1">Start a new session to chat with the AI coding agent</p>
+            <div className="mt-6 grid grid-cols-2 gap-2 max-w-sm mx-auto">
+              {[
+                "Refactor my auth module",
+                "Generate unit tests",
+                "Fix TypeScript errors",
+                "Search React best practices",
+              ].map((prompt) => (
+                <button
+                  key={prompt}
+                  onClick={() => { form.setValue("title", prompt); setOpen(true); }}
+                  className="text-left text-xs bg-card border border-card-border px-3 py-2 rounded-lg hover:border-primary/50 hover:text-primary transition-colors"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         <div className="space-y-2">
@@ -88,12 +108,18 @@ export default function Sessions() {
                 </div>
                 <div className="flex items-center gap-3 mt-1">
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Cpu className="w-3 h-3" /> {MODEL_LABELS[session.model] ?? session.model}
+                    <Zap className="w-3 h-3 text-primary" />
+                    {modelLabel(session.model)}
                   </span>
-                  <span className="text-xs text-muted-foreground">{session.messageCount} messages</span>
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Cpu className="w-3 h-3" />
+                    {session.messageCount} messages
+                  </span>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground flex-shrink-0">{new Date(session.updatedAt).toLocaleDateString()}</p>
+              <p className="text-xs text-muted-foreground flex-shrink-0">
+                {new Date(session.updatedAt).toLocaleDateString()}
+              </p>
             </div>
           ))}
         </div>
@@ -102,22 +128,22 @@ export default function Sessions() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New Session</DialogTitle>
+            <DialogTitle>New Agent Session</DialogTitle>
           </DialogHeader>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField control={form.control} name="title" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Session Title</FormLabel>
+                  <FormLabel>What do you want to build?</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Refactor authentication module" {...field} data-testid="input-session-title" />
+                    <Input placeholder="e.g., Fix the authentication bug in api/auth.ts" {...field} data-testid="input-session-title" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
               <FormField control={form.control} name="model" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Model</FormLabel>
+                  <FormLabel>AI Model</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger data-testid="select-model">
@@ -125,9 +151,14 @@ export default function Sessions() {
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="gpt-4o">GPT-4o — Reasoning</SelectItem>
-                      <SelectItem value="claude-3-5-sonnet">Claude 3.5 — Long context</SelectItem>
-                      <SelectItem value="gemini-2.0-flash">Gemini Flash — Speed</SelectItem>
+                      {FREE_MODELS.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          <span className="flex items-center gap-2">
+                            {m.label}
+                            <span className="text-xs text-muted-foreground">· {m.badge} · Free</span>
+                          </span>
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />

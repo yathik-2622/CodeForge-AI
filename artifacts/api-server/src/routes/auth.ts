@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { col, ObjectId } from "@workspace/db";
+import type { User } from "@workspace/db";
 import { getGitHubOAuthUrl, exchangeCodeForToken, getGitHubUser } from "../lib/github";
 import { signToken } from "../middleware/auth";
 
@@ -30,28 +29,41 @@ router.get("/auth/github/callback", async (req, res) => {
   try {
     const accessToken = await exchangeCodeForToken(code);
     const ghUser = await getGitHubUser(accessToken);
+    const users = await col<User>("users");
+    const now = new Date();
 
-    const existing = await db.select().from(usersTable).where(eq(usersTable.githubId, ghUser.id)).limit(1);
-    let dbUser: typeof usersTable.$inferSelect;
-    if (existing.length > 0) {
-      const [updated] = await db.update(usersTable)
-        .set({ githubToken: accessToken, login: ghUser.login, name: ghUser.name ?? null, avatarUrl: ghUser.avatar_url, updatedAt: new Date() })
-        .where(eq(usersTable.githubId, ghUser.id))
-        .returning();
-      dbUser = updated;
+    const existing = await users.findOne({ githubId: ghUser.id });
+    let userId: ObjectId;
+
+    if (existing) {
+      await users.updateOne(
+        { githubId: ghUser.id },
+        {
+          $set: {
+            githubToken: accessToken,
+            login: ghUser.login,
+            name: ghUser.name ?? null,
+            avatarUrl: ghUser.avatar_url,
+            updatedAt: now,
+          },
+        },
+      );
+      userId = existing._id;
     } else {
-      const [created] = await db.insert(usersTable).values({
+      const result = await users.insertOne({
         githubId: ghUser.id,
         login: ghUser.login,
         name: ghUser.name ?? null,
         email: ghUser.email ?? null,
         avatarUrl: ghUser.avatar_url,
         githubToken: accessToken,
-      }).returning();
-      dbUser = created;
+        createdAt: now,
+        updatedAt: now,
+      } as any);
+      userId = result.insertedId;
     }
 
-    const token = signToken({ userId: dbUser.id, githubLogin: dbUser.login, avatarUrl: dbUser.avatarUrl });
+    const token = signToken({ userId: userId.toString(), githubLogin: ghUser.login, avatarUrl: ghUser.avatar_url });
     res.cookie("auth_token", token, {
       httpOnly: true,
       secure: isProd,
@@ -67,10 +79,11 @@ router.get("/auth/github/callback", async (req, res) => {
 
 router.get("/auth/me", async (req, res) => {
   if (!req.user) { res.status(401).json({ error: "Not authenticated" }); return; }
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user.userId)).limit(1);
+  const users = await col<User>("users");
+  const user = await users.findOne({ _id: new ObjectId(req.user.userId) });
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
   res.json({
-    id: String(user.id),
+    id: user._id.toString(),
     githubId: user.githubId,
     login: user.login,
     name: user.name,

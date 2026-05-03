@@ -1,7 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
-import { repositoriesTable, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { col, ObjectId } from "@workspace/db";
+import type { Repository, User } from "@workspace/db";
 import {
   ConnectRepositoryBody,
   GetRepositoryParams,
@@ -13,104 +12,127 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-const fmtRepo = (r: typeof repositoriesTable.$inferSelect) => ({
-  id: String(r.id),
-  name: r.name,
-  fullName: r.fullName,
-  provider: r.provider,
-  url: r.url,
-  language: r.language,
-  status: r.status,
-  lastScannedAt: r.lastScannedAt?.toISOString() ?? null,
-  fileCount: r.fileCount,
-  lineCount: r.lineCount,
-  frameworks: r.frameworks,
-  createdAt: r.createdAt.toISOString(),
-});
+function fmtRepo(r: Repository & { _id: ObjectId }) {
+  return {
+    id: r._id.toString(),
+    name: r.name,
+    fullName: r.fullName,
+    provider: r.provider,
+    url: r.url,
+    language: r.language,
+    status: r.status,
+    lastScannedAt: r.lastScannedAt?.toISOString() ?? null,
+    fileCount: r.fileCount,
+    lineCount: r.lineCount,
+    frameworks: r.frameworks,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
 
-const fmtRepoDetail = (r: typeof repositoriesTable.$inferSelect) => ({
-  ...fmtRepo(r),
-  description: r.description,
-  branches: r.branches,
-  dependencies: r.dependencies,
-  apis: r.apis,
-  databases: r.databases,
-  cicdPlatform: r.cicdPlatform ?? null,
-});
+function fmtRepoDetail(r: Repository & { _id: ObjectId }) {
+  return {
+    ...fmtRepo(r),
+    description: r.description,
+    branches: r.branches,
+    dependencies: r.dependencies,
+    apis: r.apis,
+    databases: r.databases,
+    cicdPlatform: r.cicdPlatform ?? null,
+  };
+}
 
 router.get("/repositories", async (_req, res) => {
-  const repos = await db.select().from(repositoriesTable).orderBy(repositoriesTable.createdAt);
-  res.json(repos.map(fmtRepo));
+  const repos = await col<Repository>("repositories");
+  const rows = await repos.find({}).sort({ createdAt: 1 }).toArray();
+  res.json(rows.map(fmtRepo as any));
 });
 
 router.post("/repositories", async (req, res) => {
   const body = ConnectRepositoryBody.parse(req.body);
-  const [repo] = await db.insert(repositoriesTable).values({
+  const repos = await col<Repository>("repositories");
+  const now = new Date();
+  const doc = {
     name: body.name.split("/").pop() ?? body.name,
     fullName: body.name,
-    provider: body.provider,
+    provider: body.provider as any,
     url: body.url,
     language: "Unknown",
-    status: "connected",
+    status: "connected" as const,
+    fileCount: 0,
+    lineCount: 0,
     frameworks: [],
+    description: "",
     branches: ["main"],
     dependencies: [],
     apis: [],
     databases: [],
-    description: "",
-  }).returning();
-  res.status(201).json(fmtRepo(repo));
+    cicdPlatform: null,
+    createdAt: now,
+  };
+  const result = await repos.insertOne(doc as any);
+  res.status(201).json(fmtRepo({ ...doc, _id: result.insertedId } as any));
 });
 
 router.get("/repositories/:id", async (req, res) => {
   const { id } = GetRepositoryParams.parse(req.params);
-  const [repo] = await db.select().from(repositoriesTable).where(eq(repositoriesTable.id, Number(id)));
+  const repos = await col<Repository>("repositories");
+  const repo = await repos.findOne({ _id: new ObjectId(id) });
   if (!repo) { res.status(404).json({ error: "Not found" }); return; }
-  res.json(fmtRepoDetail(repo));
+  res.json(fmtRepoDetail(repo as any));
 });
 
 router.post("/repositories/:id/scan", async (req, res) => {
   const { id } = ScanRepositoryParams.parse(req.params);
-  const [repo] = await db.select().from(repositoriesTable).where(eq(repositoriesTable.id, Number(id)));
+  const repos = await col<Repository>("repositories");
+  const repo = await repos.findOne({ _id: new ObjectId(id) });
   if (!repo) { res.status(404).json({ error: "Not found" }); return; }
 
-  await db.update(repositoriesTable).set({ status: "scanning" }).where(eq(repositoriesTable.id, Number(id)));
+  await repos.updateOne({ _id: new ObjectId(id) }, { $set: { status: "scanning" } });
 
-  const githubToken = req.user
-    ? await db.select().from(usersTable).where(eq(usersTable.id, req.user.userId)).limit(1).then((r) => r[0]?.githubToken)
-    : null;
+  let githubToken: string | null | undefined = null;
+  if (req.user) {
+    const users = await col<User>("users");
+    const user = await users.findOne({ _id: new ObjectId(req.user.userId) });
+    githubToken = user?.githubToken;
+  }
 
   if (githubToken && repo.provider === "github" && repo.fullName.includes("/")) {
     const [owner, repoName] = repo.fullName.split("/");
     githubScan(githubToken, owner, repoName).then(async (data) => {
-      await db.update(repositoriesTable).set({
-        status: "ready",
-        lastScannedAt: new Date(),
-        fileCount: data.fileCount,
-        lineCount: data.lineCount,
-        frameworks: data.frameworks,
-        databases: data.databases,
-        apis: data.apis,
-        branches: data.branches,
-        language: data.language,
-      }).where(eq(repositoriesTable.id, Number(id)));
+      await repos.updateOne({ _id: new ObjectId(id) }, {
+        $set: {
+          status: "ready",
+          lastScannedAt: new Date(),
+          fileCount: data.fileCount,
+          lineCount: data.lineCount,
+          frameworks: data.frameworks,
+          databases: data.databases,
+          apis: data.apis,
+          branches: data.branches,
+          language: data.language,
+        },
+      });
     }).catch((err) => {
       logger.error(err, "Real scan failed, using fallback");
-      db.update(repositoriesTable).set({
-        status: "ready",
-        lastScannedAt: new Date(),
-        fileCount: Math.floor(Math.random() * 300) + 50,
-        lineCount: Math.floor(Math.random() * 30000) + 1000,
-      }).where(eq(repositoriesTable.id, Number(id)));
+      repos.updateOne({ _id: new ObjectId(id) }, {
+        $set: {
+          status: "ready",
+          lastScannedAt: new Date(),
+          fileCount: Math.floor(Math.random() * 300) + 50,
+          lineCount: Math.floor(Math.random() * 30000) + 1000,
+        },
+      });
     });
   } else {
     setTimeout(async () => {
-      await db.update(repositoriesTable).set({
-        status: "ready",
-        lastScannedAt: new Date(),
-        fileCount: Math.floor(Math.random() * 300) + 50,
-        lineCount: Math.floor(Math.random() * 30000) + 1000,
-      }).where(eq(repositoriesTable.id, Number(id)));
+      await repos.updateOne({ _id: new ObjectId(id) }, {
+        $set: {
+          status: "ready",
+          lastScannedAt: new Date(),
+          fileCount: Math.floor(Math.random() * 300) + 50,
+          lineCount: Math.floor(Math.random() * 30000) + 1000,
+        },
+      });
     }, 3000);
   }
 
@@ -119,7 +141,8 @@ router.post("/repositories/:id/scan", async (req, res) => {
 
 router.get("/repositories/:id/graph", async (req, res) => {
   const { id } = GetRepositoryGraphParams.parse(req.params);
-  const [repo] = await db.select().from(repositoriesTable).where(eq(repositoriesTable.id, Number(id)));
+  const repos = await col<Repository>("repositories");
+  const repo = await repos.findOne({ _id: new ObjectId(id) });
   if (!repo) { res.status(404).json({ error: "Not found" }); return; }
 
   const nodes = [
@@ -131,7 +154,7 @@ router.get("/repositories/:id/graph", async (req, res) => {
     { id: "api1", label: "POST /api/repos", type: "api", file: "src/routes/repos.ts" },
     { id: "api2", label: "GET /api/users", type: "api", file: "src/routes/users.ts" },
     { id: "svc1", label: "DatabaseService", type: "service", file: "src/db/service.ts" },
-    { id: "db1", label: "PostgreSQL", type: "database", file: "src/db/index.ts" },
+    { id: "db1", label: "MongoDB", type: "database", file: "src/db/index.ts" },
     { id: "file1", label: "index.ts", type: "file", file: "src/index.ts" },
   ];
   const edges = [
