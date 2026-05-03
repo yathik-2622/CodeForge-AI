@@ -1,181 +1,152 @@
-# CodeForge AI — Local Setup & Test Guide
-
-Complete step-by-step guide to run, test, and use CodeForge AI on Windows.
+# CodeForge AI — Complete Setup, Usage & Testing Guide
 
 ---
 
-## Prerequisites
+## What Is Each Component?
 
-Install these first (once):
-
-| Tool | Download | Version needed |
-|------|----------|---------------|
-| Node.js | https://nodejs.org | 18 or 20 LTS |
-| Python | https://python.org/downloads | 3.11+ |
-| Git | https://git-scm.com | any |
-
-Verify in a new terminal:
-```
-node --version    # v18 or v20
-python --version  # 3.11 or 3.12
-git --version
-```
+| Component | What it does |
+|-----------|-------------|
+| **Frontend** (React + Vite) | The web UI at localhost:5173 — chat, repos, dashboard |
+| **Node API** (Express) | AI streaming, model routing, WebSocket (port 3000) |
+| **Python Backend** (FastAPI) | MongoDB, auth, search, WhatsApp webhook (port 9000) |
+| **CLI** (`cf` command) | Use CodeForge AI entirely from your terminal — no browser needed |
+| **VS Code Extension** | AI code suggestions directly inside VS Code |
+| **WhatsApp Bot** | Chat with CodeForge AI on WhatsApp |
 
 ---
 
-## Step 1 — Clone the Repo
+## Part 1 — Web App
+
+### 1.1 Prerequisites
+
+Install once:
+- Node.js 18/20 LTS — https://nodejs.org
+- Python 3.11+ — https://python.org/downloads
+- Git — https://git-scm.com
+
+### 1.2 Clone & Setup .env Files
 
 ```cmd
 git clone https://github.com/yathik-2622/CodeForge-AI.git
 cd CodeForge-AI
 ```
 
----
-
-## Step 2 — Get Your Free API Keys
-
-You need at least ONE of these (both is better):
-
-### OpenRouter (free, no credit card)
-1. Go to https://openrouter.ai/keys
-2. Click **Create Key**
-3. Copy the key — it starts with `sk-or-v1-...`
-
-### Groq (free, ultra-fast)
-1. Go to https://console.groq.com/keys
-2. Click **Create API Key**
-3. Copy the key — it starts with `gsk_...`
-
----
-
-## Step 3 — MongoDB Atlas Setup (Cloud Only)
-
-1. Go to https://cloud.mongodb.com
-2. Create a free **M0** cluster (if you don't have one)
-3. Go to **Database Access** → Add user → set username + password
-4. Go to **Network Access** → Add IP Address → **Allow access from anywhere** (0.0.0.0/0)
-5. Click **Connect** on your cluster → **Drivers** → copy the connection string
-6. It looks like: `mongodb+srv://username:password@cluster0.xxxxx.mongodb.net`
-
----
-
-## Step 4 — Configure Environment Files
-
-Open **3 separate Notepad/VS Code windows** and create these files:
-
-### backend/.env
-Create file at `CodeForge-AI\backend\.env`:
+Create `backend\.env`:
 ```
-MONGODB_URL=mongodb+srv://YOUR_USER:YOUR_PASS@YOUR_CLUSTER.mongodb.net
+MONGODB_URL=mongodb+srv://USER:PASS@cluster.mongodb.net
 MONGODB_DB=codeforge
 OPENROUTER_API_KEY=sk-or-v1-...
 GROQ_API_KEY=gsk_...
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
-SESSION_SECRET=any-random-32-char-string-here-abc123
-TAVILY_API_KEY=
+GITHUB_CLIENT_ID=your_github_oauth_app_id
+GITHUB_CLIENT_SECRET=your_github_oauth_secret
+SESSION_SECRET=any-random-32-char-string
+TAVILY_API_KEY=tvly-...
+TWILIO_ACCOUNT_SID=ACxxxxx
+TWILIO_AUTH_TOKEN=xxxxx
+TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
 PORT=9000
 FRONTEND_URL=http://localhost:5173
 ```
 
-### node_api/.env
-Create file at `CodeForge-AI\node_api\.env`:
+Create `node_api\.env`:
 ```
 OPENROUTER_API_KEY=sk-or-v1-...
 GROQ_API_KEY=gsk_...
 PORT=3000
-APP_URL=http://localhost:3000
 ```
 
-### frontend/.env
-Create file at `CodeForge-AI\frontend\.env`:
+Create `frontend\.env`:
 ```
 VITE_API_URL=http://localhost:3000
 VITE_PYTHON_API_URL=http://localhost:9000
 ```
 
----
+### 1.3 Install Dependencies
 
-## Step 5 — Install Dependencies
+Open 3 CMD windows:
 
-Open **3 PowerShell/CMD windows**. Run one group in each:
-
-### Terminal 1 — Frontend
+**Window 1:**
 ```cmd
 cd CodeForge-AI\frontend
 npm install
 ```
 
-### Terminal 2 — Node API
+**Window 2:**
 ```cmd
 cd CodeForge-AI\node_api
 npm install
 ```
 
-### Terminal 3 — Python Backend
+**Window 3:**
 ```cmd
 cd CodeForge-AI\backend
-python -m venv venv
-venv\Scripts\activate
+python -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
----
+### 1.4 Start All Services
 
-## Step 6 — Start All Services
-
-Keep 3 terminals open — one for each service:
-
-### Terminal 1 — Frontend (React + Vite)
+**Window 1 — Frontend:**
 ```cmd
 cd CodeForge-AI\frontend
 npm run dev
 ```
-Expected output:
-```
-  VITE v5.x.x  ready in 500ms
-  Local: http://localhost:5173/
-```
+→ http://localhost:5173
 
-### Terminal 2 — Node API (Express + AI)
+**Window 2 — Node API:**
 ```cmd
 cd CodeForge-AI\node_api
 npm run dev
 ```
-Expected output:
-```
-{"level":"info","port":3000,"msg":"Server listening"}
-```
+→ port 3000 running
 
-### Terminal 3 — Python Backend (FastAPI + MongoDB)
+**Window 3 — Python Backend:**
 ```cmd
 cd CodeForge-AI\backend
-venv\Scripts\activate
+.venv\Scripts\activate
 python -m uvicorn main:app --host 0.0.0.0 --port 9000 --reload
 ```
-Expected output:
-```
-  ⚡ CodeForge AI — Backend Starting
-  ✅ MongoDB Atlas connected — db: 'codeforge'
-  ✅ CodeForge AI is running!
-```
+→ MongoDB Atlas connected
+
+### 1.5 Test the Web App
+
+| Test | URL | Expected result |
+|------|-----|-----------------|
+| App loads | http://localhost:5173 | Dashboard visible |
+| Node API health | http://localhost:3000/api/healthz | `{"status":"ok"}` |
+| All 23 models | http://localhost:3000/api/models | JSON array |
+| Python health | http://localhost:9000/api/health | all services shown |
+| Python models | http://localhost:9000/api/models | JSON array |
+| FastAPI Swagger | http://localhost:9000/docs | Interactive API docs |
+| Web search | http://localhost:9000/api/search/web?q=python | search results |
+
+**Test AI Chat:**
+1. Open http://localhost:5173
+2. Click Chat in sidebar
+3. Type: "Write a Python function to sort a list"
+4. Should stream a response using the selected model
+
+**Test Model Selector:**
+1. In the chat UI, click the model dropdown
+2. Switch to "Llama 4 Maverick" (Groq)
+3. Send a message — response should come back faster
 
 ---
 
-## Step 7 — Open the App
+## Part 2 — CLI (`cf` command)
 
-Open your browser and go to:
-```
-http://localhost:5173
-```
+### What is the CLI?
 
-You should see the CodeForge AI dashboard.
+The CLI lets you use CodeForge AI **entirely from your terminal** without opening a browser. Think of it like Claude Code or GitHub Copilot for your command line. You can:
+- Have a full AI conversation about your code
+- Ask it to fix bugs in a file
+- Explain how any code works
+- Analyze your whole project for issues
+- Auto-generate commit messages
+- Run a command and have AI automatically fix it if it fails
 
----
-
-## Step 8 — Install the CLI (Optional but Recommended)
-
-Open a **4th terminal**:
+### 2.1 Install the CLI
 
 ```cmd
 cd CodeForge-AI\cli
@@ -190,144 +161,279 @@ cf --version
 cf status
 ```
 
----
+### 2.2 Setup API Keys for CLI
 
-## Testing Everything
+The CLI reads keys from environment variables or `~/.codeforge/config.json`.
 
-### Test 1 — Frontend loads
-Open http://localhost:5173 — you should see the dashboard.
+Set them once (Windows PowerShell):
+```powershell
+$env:OPENROUTER_API_KEY="sk-or-v1-..."
+$env:GROQ_API_KEY="gsk_..."
+```
 
-### Test 2 — Node API health
-Open http://localhost:3000/api/healthz in your browser.
-Expected: `{"status":"ok"}`
+Or permanently (Windows):
+1. Search "Environment Variables" in Start
+2. User Variables → New
+3. Name: `OPENROUTER_API_KEY`, Value: your key
+4. Repeat for `GROQ_API_KEY`
 
-### Test 3 — All 23 AI models load
-Open http://localhost:3000/api/models
-Expected: JSON array of 23 models.
+### 2.3 CLI Commands & How to Use Each
 
-### Test 4 — Python backend health
-Open http://localhost:9000/api/health
-Expected: `{"status":"ok","services":{"mongodb":"connected", ...}}`
-
-### Test 5 — Python models endpoint
-Open http://localhost:9000/api/models
-Expected: JSON array of 23 models (same list, from Python).
-
-### Test 6 — FastAPI docs
-Open http://localhost:9000/docs
-You can test all API endpoints interactively from the browser.
-
-### Test 7 — CLI chat
+#### Interactive Chat (main mode)
 ```cmd
 cf
 ```
-Type a question like: "write a python hello world"
-You should get a streamed response.
+This is the main mode — like Claude Code. It:
+- Loads all your project files as context automatically
+- You can have a back-and-forth conversation
+- It knows about your codebase from the start
 
-### Test 8 — CLI models
-```cmd
-cf models
+Slash commands inside chat:
 ```
-Should list all 23 models with active model highlighted.
+/models        → list all 23 AI models
+/model groq/llama-3.3-70b-versatile  → switch model
+/clear         → clear conversation
+/status        → show git status
+/exit          → quit
+```
 
-### Test 9 — CLI run (the new feature)
-```cmd
-cf run "python --version"
+Example session:
 ```
-Should succeed. To test the AI error-healing:
-```cmd
-cf run "node nonexistent-script.js"
-```
-It will fail, then ask if you want AI to diagnose it.
+cf
+> You › What does this project do?
+> CF  › This is CodeForge AI, an autonomous coding agent platform...
 
-### Test 10 — CLI analyze
-Navigate to any code folder on your machine:
-```cmd
-cd path\to\any\project
-cf analyze .
+> You › Add error handling to backend/app/routes/auth.py
+> CF  › Here's the updated file with try/catch blocks...
 ```
-AI will analyze the whole codebase.
+
+#### One-shot Ask
+```cmd
+cf ask "What is the difference between async and sync in Python?"
+cf ask "Write a regex to validate an email address"
+```
+Gets an answer immediately, no REPL.
+
+#### Fix a File
+```cmd
+cf fix backend/app/db/mongo.py
+cf fix frontend/src/lib/api.ts --issue "null pointer on line 45"
+cf fix src/auth.ts --apply        (apply without asking)
+```
+Shows a diff of changes, asks you to apply.
+
+#### Explain Code
+```cmd
+cf explain backend/app/agents/graph.py
+cf explain backend/app/agents/graph.py --expert
+cf explain README.md --simple
+```
+
+#### Analyze Project
+```cmd
+cf analyze .                   (whole project)
+cf analyze src/api.ts          (single file)
+cf analyze . --security        (find security issues)
+cf analyze . --perf            (find performance issues)
+```
+
+#### AI Commit Messages
+```cmd
+cf commit              (analyze current diff → generate message → ask to commit)
+cf commit --all        (stage everything first, then commit)
+```
+
+#### Run Command with Auto-Fix
+```cmd
+cf run "npm test"
+cf run "npm test" --watch          FULLY AUTONOMOUS — keeps fixing until tests pass
+cf run "cargo build" --fix         auto-apply all fixes, ask before retrying
+cf run "pytest" --max-attempts 5
+```
+
+**How `--watch` works:**
+1. Runs `npm test`
+2. If it fails, AI reads the error and all mentioned files
+3. AI suggests `<fix file="src/auth.ts">...fixed code...</fix>` blocks
+4. CLI writes the fixes automatically
+5. Re-runs `npm test`
+6. Repeats until all tests pass or max attempts reached
+
+### 2.4 Test the CLI
+
+```cmd
+cf status                          should show API keys and server status
+cf models                          should list 23 models
+cf ask "hello, are you working?"   should get AI response
+cf run "echo hello world"          should succeed immediately
+cf run "node this-does-not-exist.js" --fix  AI diagnoses the error
+```
 
 ---
 
-## Troubleshooting
+## Part 3 — VS Code Extension
 
-### MongoDB still fails to connect
+### What does it do?
+The VS Code extension adds CodeForge AI directly inside VS Code:
+- AI code completions as you type
+- Right-click → "Ask CodeForge AI" on any selection
+- Sidebar chat panel
+- Model selector in the status bar
 
-**Check 1:** In Atlas → Network Access, is `0.0.0.0/0` added?
+### 3.1 Install
 
-**Check 2:** Is your password URL-encoded? If it has special chars like `@#$`, encode them:
-- `@` → `%40`
-- `#` → `%23`
-
-**Check 3:** Is the cluster paused? (Free tier pauses after 60 days of inactivity)
-- Atlas → Clusters → click **Resume** if it says Paused.
-
-**Check 4:** Copy the exact connection string from Atlas:
-- Click **Connect** → **Drivers** → select Python → copy the URI
-
-### Frontend shows blank page
-
+**Option A — Local install from source:**
 ```cmd
-cd CodeForge-AI\frontend
-npm install          # re-install (may be missing tw-animate-css)
-npm run dev
-```
-
-### Node API port already in use
-
-Another process is on port 3000. Find and kill it:
-```cmd
-netstat -ano | findstr :3000
-taskkill /PID <number> /F
-```
-
-### Python import errors
-
-```cmd
-cd CodeForge-AI\backend
-venv\Scripts\activate
-pip install --upgrade -r requirements.txt
-```
-
-### CLI "cf not found"
-
-Run as Administrator:
-```cmd
-cd CodeForge-AI\cli
+cd CodeForge-AI\vscode-extension
+npm install
 npm run build
-npm link
 ```
 
-Or use PowerShell as Administrator and try:
-```powershell
-Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+Then in VS Code:
+1. Press `Ctrl+Shift+P`
+2. Type: "Extensions: Install from VSIX"
+3. Navigate to `vscode-extension/out/` and select the `.vsix` file
+
+**Option B — Install vsce and package it:**
+```cmd
+npm install -g vsce
+cd CodeForge-AI\vscode-extension
+vsce package
+vscode --install-extension codeforge-ai-*.vsix
 ```
+
+### 3.2 Configure the Extension
+
+1. Open VS Code Settings (`Ctrl+,`)
+2. Search "CodeForge"
+3. Set:
+   - `codeforge.apiUrl`: `http://localhost:3000`
+   - `codeforge.openrouterKey`: your key (or use env var)
+   - `codeforge.model`: `groq/llama-3.3-70b-versatile`
+
+### 3.3 Test the Extension
+
+1. Open any `.ts` or `.py` file in VS Code
+2. Select a block of code
+3. Right-click → "CodeForge AI: Explain Selection"
+4. Should open a panel with AI explanation
+
+5. Press `Ctrl+Shift+P` → "CodeForge: Open Chat"
+6. Type a question — AI should respond
+
+---
+
+## Part 4 — WhatsApp Integration
+
+### How it works
+When someone messages your WhatsApp number, Twilio forwards it to your backend (`/api/whatsapp/webhook`). Your backend processes it with AI and sends the reply back via Twilio.
+
+### 4.1 Get Twilio Account
+
+1. Sign up free at https://www.twilio.com/try-twilio
+2. Go to Console → Account Info → copy:
+   - Account SID (starts with `AC`)
+   - Auth Token
+
+### 4.2 Enable WhatsApp Sandbox
+
+1. Console → Messaging → Try it out → Send a WhatsApp message
+2. You'll see a sandbox number like `+1 415 523 8886`
+3. Scan the QR code or send the join code from your phone to activate
+
+### 4.3 Set Your Webhook URL
+
+Your backend must be publicly accessible. Use ngrok for local testing:
+
+```cmd
+ngrok http 9000
+```
+
+Copy the HTTPS URL (e.g., `https://abc123.ngrok.io`)
+
+In Twilio Console → Messaging → Settings → WhatsApp Sandbox Settings:
+- Webhook URL: `https://abc123.ngrok.io/api/whatsapp/webhook`
+- Method: POST
+
+### 4.4 Add Env Vars & Restart Backend
+
+In `backend\.env`:
+```
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+```
+
+Restart:
+```cmd
+python -m uvicorn main:app --host 0.0.0.0 --port 9000 --reload
+```
+
+Check health: http://localhost:9000/api/health → `"whatsapp": "configured"`
+
+### 4.5 Set Display Name to "CodeForge AI"
+
+**For Sandbox (testing):** The name shows as "Twilio Sandbox" — you cannot change it.
+
+**For Production (real WhatsApp Business number):**
+1. Apply for a WhatsApp Business Account at https://business.whatsapp.com
+2. In Twilio Console → Messaging → Senders → WhatsApp Senders → Add Sender
+3. During registration, set **Display Name**: `CodeForge AI`
+4. Submit for Meta approval (takes 1-3 days)
+5. Once approved, messages will show "CodeForge AI" as the sender name
+
+### 4.6 Test WhatsApp
+
+From your phone (after joining the sandbox):
+1. Send: `hi` → should get welcome message
+2. Send: `write a hello world in python` → AI responds with code
+3. Send: `/help` → shows available commands
+4. Send: `/new` → starts a fresh session
+5. Send: `explain what is async/await` → full AI explanation
+
+**Commands users can send:**
+| Message | Response |
+|---------|----------|
+| `hi` or `/start` | Welcome message |
+| `/help` | List all commands |
+| `/new` | Start fresh conversation |
+| `/history` | Show last messages |
+| Any question | AI responds with CodeForge |
 
 ---
 
 ## Quick Reference
 
-| Service | URL | Purpose |
-|---------|-----|---------|
-| Frontend | http://localhost:5173 | Main UI |
-| Node API | http://localhost:3000 | AI streaming, models |
-| Python API | http://localhost:9000 | MongoDB, auth, search |
-| Python Docs | http://localhost:9000/docs | Interactive API explorer |
-| Models (Node) | http://localhost:3000/api/models | List all 23 models |
-| Models (Python) | http://localhost:9000/api/models | Same list from FastAPI |
-
-## CLI Quick Reference
-
+### Start Everything
 ```cmd
-cf                        Open interactive AI chat
-cf ask "question"         Quick one-shot answer
-cf run "command"          Run command, AI fixes errors
-cf fix src/file.ts        AI-powered code fix
-cf explain src/file.ts    Explain any code file
-cf analyze .              Analyze whole project
-cf commit                 AI commit message
-cf models                 List all 23 AI models
-cf status                 Check all connections
-cf config                 View/set API keys + model
+REM Terminal 1
+cd frontend && npm run dev
+
+REM Terminal 2  
+cd node_api && npm run dev
+
+REM Terminal 3
+cd backend && .venv\Scripts\activate && python -m uvicorn main:app --port 9000 --reload
+```
+
+### Health Check URLs
+| URL | Expected |
+|-----|----------|
+| http://localhost:5173 | Web app |
+| http://localhost:3000/api/healthz | `{"status":"ok"}` |
+| http://localhost:3000/api/models | 23 models |
+| http://localhost:9000/api/health | all services |
+| http://localhost:9000/docs | Swagger UI |
+
+### CLI Cheatsheet
+```cmd
+cf                      Interactive chat
+cf ask "question"       Quick answer
+cf fix file.ts          AI fix
+cf explain file.ts      Explain code
+cf analyze .            Audit project
+cf commit               AI commit msg
+cf run "cmd" --watch    Run + auto-fix loop
+cf models               List 23 models
+cf status               Check connections
 ```
