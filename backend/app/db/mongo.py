@@ -10,26 +10,58 @@ _client: AsyncIOMotorClient | None = None
 _db: AsyncIOMotorDatabase | None = None
 
 
+def _patch_dns_resolver() -> None:
+    """Force dnspython (used by motor for mongodb+srv://) to use Google DNS.
+    This bypasses corporate/home router DNS that can't resolve MongoDB Atlas SRV records."""
+    try:
+        import dns.resolver
+        resolver = dns.resolver.Resolver(configure=False)
+        resolver.nameservers = ["8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1"]
+        resolver.timeout  = 10
+        resolver.lifetime = 20
+        dns.resolver.default_resolver = resolver
+        log.info("DNS resolver patched → Google/Cloudflare DNS (fixes Atlas SRV lookups)")
+    except Exception as e:
+        log.warning(f"Could not patch DNS resolver: {e} — will use system DNS")
+
+
 async def connect_db() -> None:
     global _client, _db
-    log.info(f"Connecting to MongoDB...")
+    _patch_dns_resolver()
+    log.info("Connecting to MongoDB Atlas...")
     try:
         _client = AsyncIOMotorClient(
             settings.MONGODB_URL,
-            serverSelectionTimeoutMS=8000,
-            connectTimeoutMS=8000,
-            socketTimeoutMS=20000,
-            maxPoolSize=50,
-            minPoolSize=5,
+            serverSelectionTimeoutMS=30000,
+            connectTimeoutMS=30000,
+            socketTimeoutMS=30000,
+            tls=True,
             retryWrites=True,
             retryReads=True,
+            maxPoolSize=50,
+            minPoolSize=2,
         )
         _db = _client[settings.MONGODB_DB]
-        await _client.admin.command("ping")
-        log.info(f"✅ MongoDB connected — db: '{settings.MONGODB_DB}'")
+        await asyncio.wait_for(_client.admin.command("ping"), timeout=30)
+        log.info(f"✅ MongoDB Atlas connected — db: '{settings.MONGODB_DB}'")
         await _create_indexes()
+    except asyncio.TimeoutError:
+        log.warning(
+            "⚠️  MongoDB Atlas ping timed out.\n"
+            "    Check:\n"
+            "      1. MONGODB_URL in backend/.env is correct (mongodb+srv://...)\n"
+            "      2. Your IP is whitelisted in Atlas Network Access\n"
+            "      3. Atlas cluster is not paused\n"
+            "    Running in degraded mode."
+        )
+        _client = None
+        _db = None
     except Exception as e:
-        log.warning(f"⚠️  MongoDB unavailable: {e}\n    Running in degraded mode.")
+        log.warning(
+            f"⚠️  MongoDB unavailable: {e}\n"
+            "    Ensure MONGODB_URL is set to your Atlas connection string.\n"
+            "    Running in degraded mode."
+        )
         _client = None
         _db = None
 
@@ -46,7 +78,11 @@ async def get_db() -> AsyncIOMotorDatabase:
         from fastapi import HTTPException
         raise HTTPException(
             status_code=503,
-            detail="Database not connected. Set MONGODB_URL in backend/.env to a valid MongoDB Atlas connection string.",
+            detail=(
+                "MongoDB not connected. "
+                "Set MONGODB_URL to your Atlas URI in backend/.env "
+                "and whitelist your IP in Atlas Network Access."
+            ),
         )
     return _db
 
@@ -57,18 +93,14 @@ def is_connected() -> bool:
 
 async def _create_indexes() -> None:
     db = await get_db()
-    # Users
     await db.users.create_index("github_id", unique=True, sparse=True)
     await db.users.create_index("email", sparse=True)
     await db.users.create_index([("login", ASCENDING)])
-    # Sessions
     await db.sessions.create_index([("user_id", ASCENDING), ("updated_at", DESCENDING)])
     await db.sessions.create_index("status")
     await db.sessions.create_index("created_at")
-    # Messages
     await db.messages.create_index([("session_id", ASCENDING), ("created_at", ASCENDING)])
     await db.messages.create_index("role")
-    # Repositories
     await db.repositories.create_index("full_name")
     await db.repositories.create_index([("user_id", ASCENDING), ("updated_at", DESCENDING)])
     await db.repositories.create_index("status")
@@ -76,21 +108,16 @@ async def _create_indexes() -> None:
 
 
 async def users_col():
-    db = await get_db()
-    return db.users
+    db = await get_db(); return db.users
 
 async def sessions_col():
-    db = await get_db()
-    return db.sessions
+    db = await get_db(); return db.sessions
 
 async def messages_col():
-    db = await get_db()
-    return db.messages
+    db = await get_db(); return db.messages
 
 async def repositories_col():
-    db = await get_db()
-    return db.repositories
+    db = await get_db(); return db.repositories
 
 async def agents_col():
-    db = await get_db()
-    return db.agents
+    db = await get_db(); return db.agents
