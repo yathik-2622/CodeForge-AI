@@ -23,6 +23,7 @@ import { fixCommand }     from "./commands/fix";
 import { explainCommand } from "./commands/explain";
 import { commitCommand }  from "./commands/commit";
 import { runCommand }     from "./commands/run";
+import { generateCommand } from "./commands/generate";
 import { loadConfig, saveConfig, getConfigPath } from "./lib/config";
 import { c, banner } from "./lib/display";
 
@@ -171,6 +172,18 @@ program
     console.log();
     console.log(c.dim("  Switch model:") + " cf config --model <id>");
     console.log();
+  });
+
+// ── generate ─────────────────────────────────────────────────────────────────
+program
+  .command("generate <description>")
+  .description("Generate a complete, production-ready file from a description")
+  .option("-o, --out <path>",  "Output file path (auto-detected if not provided)")
+  .option("-l, --lang <lang>", "Force language (ts, py, sql, go, rust, etc.)")
+  .option("-m, --model <id>",  "AI model to use")
+  .action(async (description: string, opts) => {
+    if (opts.model) saveConfig({ model: opts.model });
+    await generateCommand(description, opts);
   });
 
 // ── config ────────────────────────────────────────────────────────────────────
