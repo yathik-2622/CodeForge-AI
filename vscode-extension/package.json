@@ -5,7 +5,6 @@
   "version": "0.1.0",
   "publisher": "codeforge-ai",
   "license": "MIT",
-  "icon": "media/icon.svg",
   "repository": {
     "type": "git",
     "url": "https://github.com/yathik-2622/CodeForge-AI"
