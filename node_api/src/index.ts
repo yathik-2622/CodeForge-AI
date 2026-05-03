@@ -3,7 +3,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { attachWebSocketServer } from "./lib/websocket";
 
-const port = Number(process.env["PORT"] || 8080);
+const port = Number(process.env["PORT"] || 3000);
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${process.env["PORT"]}"`);
