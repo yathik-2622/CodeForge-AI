@@ -53,6 +53,11 @@ export const GROQ_MODELS: ModelInfo[] = [
 
 export const FREE_MODELS: ModelInfo[] = [...OPENROUTER_MODELS, ...GROQ_MODELS];
 
+/** Returns the full model list — used by GET /api/models */
+export function getAvailableModels(): ModelInfo[] {
+  return FREE_MODELS;
+}
+
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 function groqModelId(id: string): string {
