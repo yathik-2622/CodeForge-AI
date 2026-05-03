@@ -6,7 +6,7 @@ import chalk from "chalk";
 import path from "path";
 import { oneShot, type Message } from "../lib/ai";
 import { readFile, writeFile, detectLanguage } from "../lib/files";
-import { c, askQuestion, printDiff } from "../lib/display";
+import { c, askQuestion } from "../lib/display";
 
 export async function fixCommand(filePath: string, issue: string, options: { apply?: boolean }) {
   const lang    = detectLanguage(filePath);
@@ -33,10 +33,8 @@ IMPORTANT: Reply with ONLY the complete fixed file content inside a single \`\`\
   ];
 
   process.stdout.write(c.dim("  Generating fix...\n"));
-
   const result = await oneShot(messages);
 
-  // Extract code block
   const match = result.match(/```[\w]*\n([\s\S]*?)```/);
   if (!match) {
     console.log(c.error("  Could not extract fixed code from AI response."));
@@ -45,7 +43,7 @@ IMPORTANT: Reply with ONLY the complete fixed file content inside a single \`\`\
   }
 
   const fixed = match[1].trim();
-  printDiff(content, fixed, filePath);
+  showDiff(content, fixed, filePath);
 
   const apply = options.apply || (await askQuestion(c.cyan("  Apply fix? (y/N) › "))) === "y";
 
@@ -58,8 +56,8 @@ IMPORTANT: Reply with ONLY the complete fixed file content inside a single \`\`\
   console.log();
 }
 
-function printDiff(orig: string, updated: string, filePath: string) {
-  const ol = orig.split("\n"), nl = updated.split("\n");
+function showDiff(orig: string, updated: string, filePath: string) {
+  const ol  = orig.split("\n"), nl = updated.split("\n");
   const max = Math.max(ol.length, nl.length);
   console.log(c.bold(`  Diff for ${filePath}:`));
   let shown = 0;
@@ -71,6 +69,6 @@ function printDiff(orig: string, updated: string, filePath: string) {
       shown++;
     }
   }
-  if (max > 40) console.log(c.muted(`  ... and more unchanged lines`));
+  if (max > 40) console.log(c.muted("  ... and more lines"));
   console.log();
 }
