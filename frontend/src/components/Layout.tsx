@@ -19,6 +19,7 @@ import {
   PanelLeftOpen,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { CodeForgeLogo } from "@/components/CodeForgeLogo";
 
 // Navigation items — add new pages here
 const nav = [
@@ -52,7 +53,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="h-14 flex items-center px-3 border-b border-sidebar-border">
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
             <div className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0">
-              <img src="/favicon.svg" alt="CodeForge AI" className="w-7 h-7" />
+              <CodeForgeLogo className="w-7 h-7 text-primary" />
             </div>
             {/* Hide text label when collapsed */}
             {!collapsed && (
