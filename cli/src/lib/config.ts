@@ -12,7 +12,7 @@ export interface Config {
 
 const CONFIG_PATH = path.join(os.homedir(), ".codeforge", "config.json");
 const DEFAULTS: Config = {
-  model:            "mistralai/mistral-7b-instruct:free",
+  model:            "google/gemma-2-9b-it:free",
   openrouterApiKey: "",
   groqApiKey:       "",
   serverUrl:        "http://localhost:3000",
