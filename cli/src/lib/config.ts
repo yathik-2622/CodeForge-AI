@@ -20,34 +20,50 @@ const DEFAULTS: Config = {
 };
 
 export function loadConfig(): Config {
-  const fromEnv: Partial<Config> = {
-    openrouterApiKey: process.env.OPENROUTER_API_KEY || "",
-    groqApiKey:       process.env.GROQ_API_KEY        || "",
-  };
+  // Load saved config file first
+  let saved: Partial<Config> = {};
   try {
     if (fs.existsSync(CONFIG_PATH)) {
-      const saved = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8")) as Partial<Config>;
-      return { ...DEFAULTS, ...saved, ...fromEnv };
+      saved = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8")) as Partial<Config>;
     }
   } catch {}
-  const localEnv = path.join(process.cwd(), ".env");
-  if (fs.existsSync(localEnv)) {
-    const lines = fs.readFileSync(localEnv, "utf-8").split("\n");
-    for (const line of lines) {
-      const [k, ...rest] = line.split("=");
-      const v = rest.join("=").trim().replace(/^["']/,"").replace(/["']$/,"");
-      if (k?.trim() === "OPENROUTER_API_KEY" && v) fromEnv.openrouterApiKey = v;
-      if (k?.trim() === "GROQ_API_KEY"        && v) fromEnv.groqApiKey       = v;
+
+  // Env vars only override if they are actually set (non-empty)
+  // They do NOT overwrite keys already saved in config file
+  const fromEnv: Partial<Config> = {};
+  if (process.env.OPENROUTER_API_KEY) fromEnv.openrouterApiKey = process.env.OPENROUTER_API_KEY;
+  if (process.env.GROQ_API_KEY)       fromEnv.groqApiKey       = process.env.GROQ_API_KEY;
+
+  // Also try local .env in cwd as a fallback (for project-level keys)
+  if (!fromEnv.openrouterApiKey && !saved.openrouterApiKey) {
+    const localEnv = path.join(process.cwd(), ".env");
+    if (fs.existsSync(localEnv)) {
+      const lines = fs.readFileSync(localEnv, "utf-8").split("\n");
+      for (const line of lines) {
+        const [k, ...rest] = line.split("=");
+        const v = rest.join("=").trim().replace(/^["']/,"").replace(/["']$/,"");
+        if (k?.trim() === "OPENROUTER_API_KEY" && v) fromEnv.openrouterApiKey = v;
+        if (k?.trim() === "GROQ_API_KEY"        && v) fromEnv.groqApiKey       = v;
+      }
     }
   }
-  return { ...DEFAULTS, ...fromEnv };
+
+  // Priority: env vars > saved file > defaults
+  return { ...DEFAULTS, ...saved, ...fromEnv };
 }
 
 export function saveConfig(updates: Partial<Config>): void {
   const dir = path.dirname(CONFIG_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const current = loadConfig();
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...current, ...updates }, null, 2));
+  // Read the raw saved file (not merged with env) to avoid overwriting env-sourced values
+  let current: Partial<Config> = {};
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      current = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8")) as Partial<Config>;
+    }
+  } catch {}
+  const merged = { ...DEFAULTS, ...current, ...updates };
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 2));
 }
 
 export function getConfigPath(): string { return CONFIG_PATH; }
