@@ -18,23 +18,15 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const NODE_COLORS: Record<string, string> = {
-  function: "#3b82f6",
-  class: "#8b5cf6",
-  api: "#10b981",
-  service: "#f59e0b",
-  database: "#ef4444",
-  file: "#64748b",
+  function: "#3b82f6", class: "#8b5cf6", api: "#10b981",
+  service: "#f59e0b", database: "#ef4444", file: "#64748b",
 };
 
 function GraphViz({ nodes, edges }: { nodes: any[]; edges: any[] }) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const W = 600;
-  const H = 380;
-  const cols = 5;
+  const W = 600; const H = 380; const cols = 5;
   const positioned = nodes.map((n, i) => ({
-    ...n,
-    x: 80 + (i % cols) * 110,
-    y: 60 + Math.floor(i / cols) * 100,
+    ...n, x: 80 + (i % cols) * 110, y: 60 + Math.floor(i / cols) * 100,
   }));
   const pos = Object.fromEntries(positioned.map((n) => [n.id, n]));
 
@@ -47,19 +39,9 @@ function GraphViz({ nodes, edges }: { nodes: any[]; edges: any[] }) {
           </marker>
         </defs>
         {edges.map((e, i) => {
-          const s = pos[e.source];
-          const t = pos[e.target];
+          const s = pos[e.source]; const t = pos[e.target];
           if (!s || !t) return null;
-          return (
-            <line
-              key={i}
-              x1={s.x} y1={s.y} x2={t.x} y2={t.y}
-              stroke="hsl(217 32% 20%)"
-              strokeWidth={1.5}
-              markerEnd="url(#arrow)"
-              strokeDasharray={e.relation === "imports" ? "4 2" : undefined}
-            />
-          );
+          return <line key={i} x1={s.x} y1={s.y} x2={t.x} y2={t.y} stroke="hsl(217 32% 20%)" strokeWidth={1.5} markerEnd="url(#arrow)" strokeDasharray={e.relation === "imports" ? "4 2" : undefined} />;
         })}
         {positioned.map((n) => (
           <g key={n.id}>
@@ -85,19 +67,20 @@ export default function RepositoryDetail() {
   const params = useParams<{ id: string }>();
   const id = params.id;
   const qc = useQueryClient();
-  const { data: repo } = useGetRepository(id, { query: { enabled: !!id, queryKey: getGetRepositoryQueryKey(id) } });
-  const { data: graph } = useGetRepositoryGraph(id, { query: { enabled: !!id, queryKey: getGetRepositoryGraphQueryKey(id) } });
-  const scan = useScanRepository();
-  const { data: findings } = useListSecurityFindings({ repositoryId: id });
-  const { data: deployments } = useListDeployments();
+
+  const { data: repo }         = useGetRepository(id);
+  const { data: graph }        = useGetRepositoryGraph(id);
+  const scan                   = useScanRepository();
+  const { data: findings }     = useListSecurityFindings({ repositoryId: id });
+  const { data: deployments }  = useListDeployments();
 
   const repoDeployments = (deployments ?? []).filter((d) => d.repositoryId === id);
-  const repoFindings = findings ?? [];
+  const repoFindings    = findings ?? [];
 
   const handleScan = () => {
-    scan.mutate({ id }, {
+    scan.mutate({ id: id! }, {
       onSuccess: () => {
-        setTimeout(() => qc.invalidateQueries({ queryKey: getGetRepositoryQueryKey(id) }), 3500);
+        setTimeout(() => qc.invalidateQueries({ queryKey: getGetRepositoryQueryKey(id!) }), 3500);
       },
     });
   };
@@ -115,7 +98,7 @@ export default function RepositoryDetail() {
     <Layout>
       <PageHeader
         title={repo.fullName}
-        description={repo.description || repo.url}
+        description={repo.description ?? repo.url}
         action={
           <Button size="sm" variant="outline" onClick={handleScan} disabled={scan.isPending || repo.status === "scanning"} data-testid="button-scan">
             <Scan className="w-3.5 h-3.5 mr-1.5" />
@@ -124,19 +107,18 @@ export default function RepositoryDetail() {
         }
       />
       <div className="flex-1 overflow-y-auto p-6">
-        {/* Meta strip */}
         <div className="flex flex-wrap gap-4 mb-6 p-4 bg-card border border-card-border rounded-lg">
           <div className="flex items-center gap-2 text-sm">
             <FileCode2 className="w-4 h-4 text-muted-foreground" />
-            <span className="text-muted-foreground">{repo.fileCount.toLocaleString()} files</span>
+            <span className="text-muted-foreground">{(repo.fileCount ?? 0).toLocaleString()} files</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
             <AlignLeft className="w-4 h-4 text-muted-foreground" />
-            <span className="text-muted-foreground">{repo.lineCount.toLocaleString()} lines</span>
+            <span className="text-muted-foreground">{(repo.lineCount ?? 0).toLocaleString()} lines</span>
           </div>
           <div className="flex items-center gap-2 text-sm">
             <Cpu className="w-4 h-4 text-muted-foreground" />
-            <span className="text-muted-foreground">{repo.language || "Unknown"}</span>
+            <span className="text-muted-foreground">{repo.language ?? "Unknown"}</span>
           </div>
           <StatusBadge value={repo.status} />
           {repo.lastScannedAt && (
@@ -215,7 +197,11 @@ export default function RepositoryDetail() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium">{f.title}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">{f.description}</p>
-                    {f.file && <p className="text-xs font-mono text-muted-foreground mt-1">{f.file}{f.line ? `:${f.line}` : ""}</p>}
+                    {(f.file ?? f.filePath) && (
+                      <p className="text-xs font-mono text-muted-foreground mt-1">
+                        {f.file ?? f.filePath}{(f.line ?? f.lineNumber) ? `:${f.line ?? f.lineNumber}` : ""}
+                      </p>
+                    )}
                   </div>
                   <StatusBadge value={f.status} />
                 </div>
