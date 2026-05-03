@@ -176,27 +176,29 @@ program
 // ── config ────────────────────────────────────────────────────────────────────
 program
   .command("config")
-  .description("View or set CLI configuration")
-  .option("--model <id>", "Set default AI model")
-  .option("--show",       "Show current config (default)")
+  .description("View or set CLI configuration (keys saved to ~/.codeforge/config.json)")
+  .option("--model <id>",           "Set default AI model")
+  .option("--openrouter-key <key>", "Save OpenRouter API key (free at openrouter.ai/keys)")
+  .option("--groq-key <key>",       "Save Groq API key (free at console.groq.com/keys)")
+  .option("--server-url <url>",     "Set node_api URL (default: http://localhost:3000)")
+  .option("--show",                 "Show current config")
   .action((opts) => {
+    let changed = false;
+    if (opts.openrouterKey) { saveConfig({ openrouterApiKey: opts.openrouterKey }); console.log(c.success("  ✓ OpenRouter API key saved")); changed = true; }
+    if (opts.groqKey)       { saveConfig({ groqApiKey: opts.groqKey });              console.log(c.success("  ✓ Groq API key saved"));       changed = true; }
+    if (opts.model)         { saveConfig({ model: opts.model });                     console.log(c.success(`  ✓ Model set to ${opts.model}`)); changed = true; }
+    if (opts.serverUrl)     { saveConfig({ serverUrl: opts.serverUrl });             console.log(c.success(`  ✓ Server URL set to ${opts.serverUrl}`)); changed = true; }
+    // Always show current config after changes or when --show / no args
     const cfg = loadConfig();
-    if (opts.show || !opts.model) {
-      console.log();
-      console.log(c.brand("  CodeForge CLI Config"));
-      console.log(c.dim("  File: " + getConfigPath()));
-      console.log();
-      console.log(`  Model:          ${c.cyan(cfg.model)}`);
-      console.log(`  OpenRouter key: ${cfg.openrouterApiKey ? c.success("✓ set") : c.warn("not set — free at openrouter.ai")}`);
-      console.log(`  Groq key:       ${cfg.groqApiKey       ? c.success("✓ set") : c.warn("not set — free at console.groq.com")}`);
-      console.log(`  Server URL:     ${c.dim(cfg.serverUrl)}`);
-      console.log();
-      return;
-    }
-    if (opts.model) {
-      saveConfig({ model: opts.model });
-      console.log(c.success(`  ✓ Default model set to ${opts.model}`));
-    }
+    console.log();
+    console.log(c.brand("  CodeForge CLI Config"));
+    console.log(c.dim("  File: " + getConfigPath()));
+    console.log();
+    console.log(`  Model:          ${c.cyan(cfg.model)}`);
+    console.log(`  OpenRouter key: ${cfg.openrouterApiKey ? c.success("✓ set") : c.warn("not set — run: cf config --openrouter-key sk-or-v1-...")}`);
+    console.log(`  Groq key:       ${cfg.groqApiKey       ? c.success("✓ set") : c.warn("not set — run: cf config --groq-key gsk_...")}`);
+    console.log(`  Server URL:     ${c.dim(cfg.serverUrl)}`);
+    console.log();
   });
 
 // ── status ────────────────────────────────────────────────────────────────────
