@@ -8,49 +8,32 @@ const SEVERITY_ORDER = ["critical", "high", "medium", "low", "info"] as const;
 const SEVERITY_LABELS = { critical: "Critical", high: "High", medium: "Medium", low: "Low", info: "Info" };
 const SEVERITY_BG = {
   critical: "bg-red-500/10 border-red-500/20",
-  high: "bg-orange-500/10 border-orange-500/20",
-  medium: "bg-yellow-500/10 border-yellow-500/20",
-  low: "bg-blue-500/10 border-blue-500/20",
-  info: "bg-slate-500/10 border-slate-500/20",
+  high:     "bg-orange-500/10 border-orange-500/20",
+  medium:   "bg-yellow-500/10 border-yellow-500/20",
+  low:      "bg-blue-500/10 border-blue-500/20",
+  info:     "bg-slate-500/10 border-slate-500/20",
 };
-const SEVERITY_ICONS = {
-  critical: AlertOctagon,
-  high: AlertTriangle,
-  medium: AlertCircle,
-  low: Info,
-  info: Info,
-};
-const SEVERITY_TEXT = {
-  critical: "text-red-400",
-  high: "text-orange-400",
-  medium: "text-yellow-400",
-  low: "text-blue-400",
-  info: "text-slate-400",
-};
+const SEVERITY_ICONS = { critical: AlertOctagon, high: AlertTriangle, medium: AlertCircle, low: Info, info: Info };
+const SEVERITY_TEXT  = { critical: "text-red-400", high: "text-orange-400", medium: "text-yellow-400", low: "text-blue-400", info: "text-slate-400" };
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
-  secret_leak: Key,
-  prompt_injection: Terminal,
-  malicious_package: Package,
-  destructive_command: Terminal,
-  vulnerability: Bug,
-  dependency: Lock,
+  secret_leak: Key, prompt_injection: Terminal, malicious_package: Package,
+  destructive_command: Terminal, vulnerability: Bug, dependency: Lock,
 };
 
 export default function Security() {
   const [filterSeverity, setFilterSeverity] = useState<string | null>(null);
-  const { data: summary } = useGetSecuritySummary();
-  const { data: findings } = useListSecurityFindings(filterSeverity ? { severity: filterSeverity as any } : {});
+  const { data: summary }  = useGetSecuritySummary();
+  const { data: findings } = useListSecurityFindings(filterSeverity ? { severity: filterSeverity } : {});
 
   return (
     <Layout>
       <PageHeader title="Security Dashboard" description="Findings across all repositories" />
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* Summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {SEVERITY_ORDER.map((sev) => {
-            const Icon = SEVERITY_ICONS[sev];
-            const count = summary?.[sev] ?? 0;
+            const Icon   = SEVERITY_ICONS[sev];
+            const count  = (summary as any)?.[sev] ?? 0;
             const active = filterSeverity === sev;
             return (
               <button
@@ -70,14 +53,13 @@ export default function Security() {
           })}
         </div>
 
-        {/* Summary stats */}
         {summary && (
           <div className="flex gap-4 text-sm text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <Shield className="w-4 h-4 text-emerald-400" />
-              {summary.resolved} resolved
+              {(summary as any).resolved} resolved
             </span>
-            <span>{summary.total} total findings</span>
+            <span>{(summary as any).total} total findings</span>
             {filterSeverity && (
               <button className="text-primary text-xs hover:underline" onClick={() => setFilterSeverity(null)}>
                 Clear filter
@@ -86,7 +68,6 @@ export default function Security() {
           </div>
         )}
 
-        {/* Findings list */}
         <div className="space-y-2">
           {(!findings || findings.length === 0) && (
             <div className="text-center py-12 text-muted-foreground">
@@ -111,10 +92,12 @@ export default function Security() {
                       <CategoryIcon className="w-3 h-3" />
                       {f.category.replace(/_/g, " ")}
                     </span>
-                    {f.file && (
-                      <span className="text-xs font-mono text-muted-foreground">{f.file}{f.line ? `:${f.line}` : ""}</span>
+                    {(f.file ?? f.filePath) && (
+                      <span className="text-xs font-mono text-muted-foreground">
+                        {f.file ?? f.filePath}{(f.line ?? f.lineNumber) ? `:${f.line ?? f.lineNumber}` : ""}
+                      </span>
                     )}
-                    <span className="text-xs text-muted-foreground">{new Date(f.detectedAt).toLocaleDateString()}</span>
+                    <span className="text-xs text-muted-foreground">{new Date(f.detectedAt ?? f.createdAt).toLocaleDateString()}</span>
                   </div>
                 </div>
               </div>
