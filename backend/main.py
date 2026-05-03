@@ -13,6 +13,7 @@ from app.routes.search import router as search_router
 from app.routes.whatsapp import router as whatsapp_router
 from app.routes.instagram import router as instagram_router
 from app.routes.dashboard import router as dashboard_router
+from app.routes.models import router as models_router
 from app.db.mongo import connect_db, disconnect_db
 from app.db.qdrant import ensure_collection, get_qdrant
 from app.config import settings
@@ -36,10 +37,11 @@ async def lifespan(app: FastAPI):
     log.info("=" * 60)
     log.info("  ⚡ CodeForge AI — Backend Starting")
     log.info("=" * 60)
-    log.info(f"  AI Model : {settings.DEFAULT_MODEL}")
-    log.info(f"  OpenRouter: {'✅' if settings.OPENROUTER_API_KEY else '❌ OPENROUTER_API_KEY missing'}")
-    log.info(f"  Tavily   : {'✅' if settings.TAVILY_API_KEY else '⚠️  web search disabled'}")
-    log.info(f"  GitHub   : {'✅' if settings.GITHUB_CLIENT_ID else '⚠️  OAuth not configured'}")
+    log.info(f"  AI Model  : {settings.DEFAULT_MODEL}")
+    log.info(f"  OpenRouter: {'✅' if settings.OPENROUTER_API_KEY else '❌ missing'}")
+    log.info(f"  Groq      : {'✅' if settings.GROQ_API_KEY else '⚠️  not configured'}")
+    log.info(f"  Tavily    : {'✅' if settings.TAVILY_API_KEY else '⚠️  web search disabled'}")
+    log.info(f"  GitHub    : {'✅' if settings.GITHUB_CLIENT_ID else '⚠️  OAuth not configured'}")
     log.info("=" * 60)
 
     await connect_db()
@@ -54,6 +56,7 @@ async def lifespan(app: FastAPI):
     log.info("✅ CodeForge AI is running!")
     log.info(f"   Docs   : http://localhost:{settings.PORT}/docs")
     log.info(f"   Health : http://localhost:{settings.PORT}/api/health")
+    log.info(f"   Models : http://localhost:{settings.PORT}/api/models")
 
     yield
 
@@ -63,18 +66,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="CodeForge AI API",
-    description=(
-        "Autonomous AI coding agent backend. "
-        "LangGraph multi-agent system with SSE streaming, "
-        "MongoDB, Qdrant vector search, and GitHub OAuth."
-    ),
+    description="Autonomous AI coding agent — LangGraph + FastAPI + MongoDB Atlas",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -88,17 +86,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Global error handler ──────────────────────────────────────────────────────
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     log.error(f"Unhandled exception: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error. Check backend logs."},
-    )
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
-# ── Routers ───────────────────────────────────────────────────────────────────
+
 app.include_router(health_router)
+app.include_router(models_router)
 app.include_router(auth_router)
 app.include_router(sessions_router)
 app.include_router(repositories_router)
@@ -106,19 +102,3 @@ app.include_router(search_router)
 app.include_router(whatsapp_router)
 app.include_router(instagram_router)
 app.include_router(dashboard_router)
-
-
-@app.get("/")
-async def root():
-    return {
-        "name": "CodeForge AI API",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "health": "/api/health",
-        "status": "running",
-    }
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=settings.PORT, reload=True)
